@@ -1,0 +1,235 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NOW_YYYYMMDDHHMM="$(date +%Y%m%d%H%M)"
+CLOUD_CONFIG_TEMPLATE="${ROOT_DIR}/script/launch-vm.cfg"
+
+usage() {
+  cat <<'EOF'
+Usage: script/launch-vm [options]
+
+Create an Azure VM and run private-isu provisioning via cloud-init + ansible.
+
+Options:
+  --profile PROFILE      VM profile: player|bench (default: player)
+  --name NAME            VM name (default: private-isu-app)
+  --resource-group NAME  Azure resource group (default: rg-private-isu-YYYYMMDDHHmm)
+  --location LOCATION    Azure location (default: japaneast)
+  --size SIZE            Override VM size (default: profile-based; player=Standard_F2s_v2, bench=Standard_F4s_v2)
+  --admin-user USER      Admin username (default: azureuser)
+  --ssh-key PATH         SSH public key path (default: ~/.ssh/id_ed25519.pub)
+  --dry-run              Print planned Azure commands without creating resources
+  -h, --help             Show this help
+
+Notes:
+  - Spec reference from README-private-isu.md:
+    player ~= c7a.large, bench ~= c7a.xlarge
+  - Azure size mapping defaults:
+    player -> Standard_F2s_v2 (2 vCPU / 4 GiB)
+    bench  -> Standard_F4s_v2 (4 vCPU / 8 GiB)
+  - Default tags:
+    CostControl=ignore, SecurityControl=ignore,
+    GitHub Repository=koudaiii/ai-tour-for-partner-2026-track4-session1
+EOF
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "Error: '${cmd}' is required but not installed." >&2
+    exit 1
+  fi
+}
+
+log() {
+  echo "[launch-vm] $*"
+}
+
+run_az() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    local first=1
+    local arg
+    for arg in az "$@"; do
+      if [[ "${first}" -eq 1 ]]; then
+        printf '%q' "${arg}"
+        first=0
+      else
+        printf ' %q' "${arg}"
+      fi
+    done
+    printf '\n'
+    return 0
+  fi
+  az "$@"
+}
+
+require_tools() {
+  require_cmd az
+}
+
+default_size_for_profile() {
+  case "${PROFILE}" in
+    player)
+      echo "Standard_F2s_v2"
+      ;;
+    bench)
+      echo "Standard_F4s_v2"
+      ;;
+    *)
+      echo "Error: --profile must be 'player' or 'bench'" >&2
+      exit 1
+      ;;
+  esac
+}
+
+ensure_prerequisites() {
+  if [[ ! -f "${SSH_KEY_PATH}" ]]; then
+    echo "Error: SSH public key not found: ${SSH_KEY_PATH}" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "${CLOUD_CONFIG_TEMPLATE}" ]]; then
+    echo "Error: cloud-config template not found: ${CLOUD_CONFIG_TEMPLATE}" >&2
+    exit 1
+  fi
+
+  if ! az account show --output none >/dev/null 2>&1; then
+    echo "Error: Azure login required. Run 'az login' first." >&2
+    exit 1
+  fi
+  local account
+  account="$(az account show --query '{user:user.name,subscription:name}' -o tsv 2>/dev/null | tr '\t' ' ')"
+  log "Azure login confirmed: ${account}"
+}
+
+
+create_vm() {
+  log "Creating/ensuring resource group: ${RESOURCE_GROUP} (${LOCATION})"
+  local -a group_create_cmd=(
+    group create
+    --name "${RESOURCE_GROUP}"
+    --location "${LOCATION}"
+    --output none
+  )
+  if [[ "${#TAGS[@]}" -gt 0 ]]; then
+    group_create_cmd+=(--tags "${TAGS[@]}")
+  fi
+  run_az "${group_create_cmd[@]}"
+
+  log "Creating VM: ${VM_NAME} (size=${SIZE}, profile=${PROFILE})"
+  run_az vm create \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${VM_NAME}" \
+    --image Ubuntu2404 \
+    --size "${SIZE}" \
+    --admin-username "${ADMIN_USER}" \
+    --ssh-key-values "${SSH_KEY_PATH}" \
+    --custom-data "@${CLOUD_CONFIG_TEMPLATE}" \
+    --public-ip-sku Standard \
+    --output none
+
+  log "Opening HTTP port 80"
+  run_az vm open-port \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${VM_NAME}" \
+    --port 80 \
+    --priority 1001 \
+    --output none || true
+}
+
+print_result() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "Dry-run completed. No Azure resources were created."
+    return 0
+  fi
+
+  local public_ip
+  public_ip="$(az vm show -d -g "${RESOURCE_GROUP}" -n "${VM_NAME}" --query publicIps -o tsv)"
+  log "VM created: ${VM_NAME}"
+  log "Public IP: ${public_ip}"
+  log "SSH: ssh ${ADMIN_USER}@${public_ip}"
+  log "Cloud-init log: /var/log/cloud-init-output.log"
+  log "Provisioning log: /var/log/private-isu-bootstrap.log"
+}
+
+PROFILE="player"
+VM_NAME="private-isu-app"
+RESOURCE_GROUP="rg-private-isu-${NOW_YYYYMMDDHHMM}"
+LOCATION="japaneast"
+ADMIN_USER="azureuser"
+SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub"
+SIZE=""
+DRY_RUN=0
+TAGS=(
+  "CostControl=ignore"
+  "SecurityControl=ignore"
+  "GitHub Repository=koudaiii/ai-tour-for-partner-2026-track4-session1"
+)
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --profile)
+        PROFILE="${2:-}"
+        shift 2
+        ;;
+      --name)
+        VM_NAME="${2:-}"
+        shift 2
+        ;;
+      --resource-group)
+        RESOURCE_GROUP="${2:-}"
+        shift 2
+        ;;
+      --location)
+        LOCATION="${2:-}"
+        shift 2
+        ;;
+      --size)
+        SIZE="${2:-}"
+        shift 2
+        ;;
+      --admin-user)
+        ADMIN_USER="${2:-}"
+        shift 2
+        ;;
+      --ssh-key)
+        SSH_KEY_PATH="${2:-}"
+        shift 2
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Error: unknown option '$1'" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  done
+}
+
+main() {
+  parse_args "$@"
+  require_tools
+  ensure_prerequisites
+  if [[ -z "${SIZE}" ]]; then
+    SIZE="$(default_size_for_profile)"
+  fi
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "Dry-run cloud-config (${CLOUD_CONFIG_TEMPLATE}):"
+    echo "----- BEGIN cloud-config -----"
+    cat "${CLOUD_CONFIG_TEMPLATE}"
+    echo "----- END cloud-config -----"
+  fi
+  create_vm
+  print_result
+}
+
+main "$@"

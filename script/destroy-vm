@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: script/destroy-vm [options]
+
+Delete Azure Resource Group (including VM and related resources).
+
+Options:
+  -g, --resource-group NAME  Resource group to delete
+  --tag KEY=VALUE            Delete all resource groups matching tag
+  --yes                  Skip interactive confirmation
+  --dry-run              Print planned Azure command without deleting resources
+  -h, --help             Show this help
+EOF
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "Error: '${cmd}' is required but not installed." >&2
+    exit 1
+  fi
+}
+
+log() {
+  echo "[destroy-vm] $*"
+}
+
+run_az() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    local first=1
+    local arg
+    for arg in az "$@"; do
+      if [[ "${first}" -eq 1 ]]; then
+        printf '%q' "${arg}"
+        first=0
+      else
+        printf ' %q' "${arg}"
+      fi
+    done
+    printf '\n'
+    return 0
+  fi
+  az "$@"
+}
+
+ensure_azure_login() {
+  if ! az account show --output none >/dev/null 2>&1; then
+    echo "Error: Azure login required. Run 'az login' first." >&2
+    exit 1
+  fi
+}
+
+confirm_delete() {
+  if [[ "${YES}" -eq 1 || "${DRY_RUN}" -eq 1 ]]; then
+    return 0
+  fi
+  echo "Error: require --yes or --dry-run to proceed with deletion." >&2
+  return 1
+}
+
+RESOURCE_GROUP=""
+TAG=""
+YES=0
+DRY_RUN=0
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -g|--resource-group)
+        RESOURCE_GROUP="${2:-}"
+        shift 2
+        ;;
+      --tag)
+        TAG="${2:-}"
+        if [[ -z "${TAG}" ]]; then
+          echo "Error: --tag requires KEY=VALUE." >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --yes)
+        YES=1
+        shift
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Error: unknown option '$1'" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  done
+}
+
+main() {
+  parse_args "$@"
+  require_cmd az
+  ensure_azure_login
+
+  if [[ -z "${RESOURCE_GROUP}" ]]; then
+    if [[ -z "${TAG}" ]]; then
+      echo "Error: --resource-group or --tag is required." >&2
+      usage
+      exit 1
+    fi
+  fi
+
+  if [[ -n "${TAG}" && "${TAG}" != *=* ]]; then
+    echo "Error: --tag must be in KEY=VALUE format." >&2
+    usage
+    exit 1
+  fi
+
+  if [[ -n "${RESOURCE_GROUP}" && -n "${TAG}" ]]; then
+    echo "Error: use either --resource-group or --tag (not both)." >&2
+    usage
+    exit 1
+  fi
+
+  confirm_delete
+
+  local -a targets=()
+  if [[ -n "${RESOURCE_GROUP}" ]]; then
+    targets+=("${RESOURCE_GROUP}")
+  else
+    mapfile -t targets < <(az group list --tag "${TAG}" --query '[].name' -o tsv)
+    if [[ "${#targets[@]}" -eq 0 ]]; then
+      log "No resource groups found for tag '${TAG}'. Nothing to delete."
+      exit 0
+    fi
+  fi
+
+  local rg
+  for rg in "${targets[@]}"; do
+    log "Deleting resource group '${rg}' (no-wait)"
+    run_az group delete --name "${rg}" --yes --no-wait
+  done
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "Dry-run completed. No Azure resources were deleted."
+  else
+    if [[ -n "${RESOURCE_GROUP}" ]]; then
+      log "Delete command submitted for resource group: ${RESOURCE_GROUP}"
+    else
+      log "Delete commands submitted for ${#targets[@]} resource group(s) with tag: ${TAG}"
+    fi
+  fi
+}
+
+main "$@"

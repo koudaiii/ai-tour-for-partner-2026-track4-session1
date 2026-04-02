@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_TAG_KEY="GitHub Repository"
+REPO_TAG_VALUE="koudaiii/ai-tour-for-partner-2026-track4-session1"
+REPO_TAG="${REPO_TAG_KEY}=${REPO_TAG_VALUE}"
+
+usage() {
+  cat <<'EOF'
+Usage: script/list-resource-groups [options]
+
+List Azure Resource Groups created by this repository tag.
+
+Options:
+  --output FORMAT  Azure CLI output format: table|json|tsv (default: table)
+  -h, --help       Show this help
+EOF
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "Error: '${cmd}' is required but not installed." >&2
+    exit 1
+  fi
+}
+
+log() {
+  echo "[list-resource-groups] $*"
+}
+
+ensure_azure_login() {
+  if ! az account show --output none >/dev/null 2>&1; then
+    echo "Error: Azure login required. Run 'az login' first." >&2
+    exit 1
+  fi
+}
+
+OUTPUT="table"
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --output)
+        OUTPUT="${2:-}"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Error: unknown option '$1'" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  done
+}
+
+validate_output() {
+  case "${OUTPUT}" in
+    table|json|tsv) ;;
+    *)
+      echo "Error: --output must be one of: table, json, tsv" >&2
+      exit 1
+      ;;
+  esac
+}
+
+main() {
+  parse_args "$@"
+  validate_output
+  require_cmd az
+  ensure_azure_login
+
+  log "Listing resource groups with tag '${REPO_TAG}'"
+  az group list \
+    --tag "${REPO_TAG}" \
+    --query '[].{name:name,location:location,state:properties.provisioningState,costControl:tags.CostControl,securityControl:tags.SecurityControl}' \
+    --output "${OUTPUT}"
+}
+
+main "$@"
