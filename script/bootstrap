@@ -194,6 +194,14 @@ try_fix_local_privileges() {
   return 0
 }
 
+try_fix_local_schema() {
+  log "Attempting to load schema from sql/bootstrap_create_table.sql"
+  if run_sql_file "${ROOT_DIR}/sql/bootstrap_create_table.sql" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
 check_db_state() {
   local missing_tables=()
   local missing_table_privs=()
@@ -261,7 +269,20 @@ check_db_state() {
   fi
 
   if (( ${#missing_tables[@]} > 0 )); then
-    error_exit "Missing tables: ${missing_tables[*]}. Load schema/data with: psql -U ${ISUCONP_DB_USER} -d ${ISUCONP_DB_NAME} -f sql/0_schema.sql && psql -U ${ISUCONP_DB_USER} -d ${ISUCONP_DB_NAME} -f sql/1_data.sql"
+    if [[ -z "${ISUCONP_DATABASE_URL}" && ( "${DB_CHECK_HOST}" == "localhost" || "${DB_CHECK_HOST}" == "127.0.0.1" || -z "${DB_CHECK_HOST}" ) ]]; then
+      if try_fix_local_schema; then
+        missing_tables=()
+        for table in users posts comments; do
+          if [[ "$(run_sql_file "${ROOT_DIR}/sql/bootstrap_check_table_exists.sql" "table_name=${table}")" != "t" ]]; then
+            missing_tables+=("${table}")
+          fi
+        done
+      fi
+    fi
+
+    if (( ${#missing_tables[@]} > 0 )); then
+      error_exit "Missing tables: ${missing_tables[*]}. Load schema with: psql -U ${ISUCONP_DB_USER} -d ${ISUCONP_DB_NAME} -f sql/bootstrap_create_table.sql then restore dump with: pg_restore -U ${ISUCONP_DB_USER} -d ${ISUCONP_DB_NAME} sql/isuconp_data.dump"
+    fi
   fi
 
   if (( ${#missing_table_privs[@]} > 0 )) || (( ${#missing_seq_privs[@]} > 0 )); then
