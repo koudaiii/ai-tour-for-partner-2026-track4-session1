@@ -2,12 +2,35 @@
 set -euo pipefail
 
 DUMP_PATH="${DUMP_PATH:-/docker-entrypoint-initdb.d/isuconp_data.dump}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+FIX_SEQUENCES_SQL="${ROOT_DIR}/sql/bootstrap_fix_sequences.sql"
 RESTORE_COMMON_OPTS=(
   --clean
   --if-exists
   --no-owner
   --no-privileges
 )
+
+run_fix_sequences() {
+  if [[ ! -f "${FIX_SEQUENCES_SQL}" ]]; then
+    echo "[restore] warning: sequence-fix SQL not found: ${FIX_SEQUENCES_SQL}" >&2
+    return 0
+  fi
+
+  if [[ -n "${POSTGRES_USER:-}" && -n "${POSTGRES_DB:-}" ]]; then
+    psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -f "${FIX_SEQUENCES_SQL}" >/dev/null
+    return 0
+  fi
+
+  PGPASSWORD="${ISUCONP_DB_PASSWORD}" \
+    psql \
+      -v ON_ERROR_STOP=1 \
+      -h "${ISUCONP_DB_HOST}" \
+      -p "${ISUCONP_DB_PORT}" \
+      -U "${ISUCONP_DB_USER}" \
+      -d "${ISUCONP_DB_NAME}" \
+      -f "${FIX_SEQUENCES_SQL}" >/dev/null
+}
 
 resolve_pg_restore_bin() {
   local best_bin=""
@@ -54,6 +77,7 @@ if [[ -n "${POSTGRES_USER:-}" && -n "${POSTGRES_DB:-}" ]]; then
     echo "[restore] If you see 'unsupported version ... in file header', install newer PostgreSQL client tools." >&2
     exit 1
   fi
+  run_fix_sequences
   exit 0
 fi
 
@@ -76,3 +100,5 @@ if ! PGPASSWORD="${ISUCONP_DB_PASSWORD}" \
   echo "[restore] If you see 'unsupported version ... in file header', install newer PostgreSQL client tools." >&2
   exit 1
 fi
+
+run_fix_sequences
