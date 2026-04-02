@@ -26,8 +26,9 @@
           - uv
       tags:
         - python3
-    - name: Sync Python dependencies via UV
-      shell: /home/isucon/private_isu/.venv/bin/uv sync --compile-bytecode
+
+    - name: Bootstrap app dependencies via script/bootstrap
+      shell: PATH=/home/isucon/private_isu/.venv/bin:$PATH /home/isucon/private_isu/script/bootstrap
       args:
         chdir: /home/isucon/private_isu
       tags:
