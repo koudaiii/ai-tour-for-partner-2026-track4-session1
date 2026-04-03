@@ -5,6 +5,7 @@ import re
 import shlex
 import subprocess
 import tempfile
+import uuid
 
 import flask
 import psycopg2
