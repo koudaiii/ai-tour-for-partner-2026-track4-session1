@@ -41,6 +41,7 @@ script/destroy-vm
 - `script/restore`: Restore PostgreSQL dump
 - `script/backup`: Create PostgreSQL dump
 - `script/upload-to-github`: Upload dump file to GitHub Releases
+- `script/deploy-infra`: Deploy Azure infra from `infra/main.bicep`
 - `script/launch-vm`: Create Azure VM
 - `script/list-resource-groups`: List Resource Groups tagged for this repository
 - `script/destroy-vm`: Delete Resource Group(s)
