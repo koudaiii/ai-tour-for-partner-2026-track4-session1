@@ -20,7 +20,6 @@ jobs:
 
       - name: Bicep Format Check
         run: |
-          az bicep format --file infra/main.bicep --output-file /dev/null
           diff <(az bicep format --file infra/main.bicep --stdout) infra/main.bicep || {
             echo "::error::Bicep file is not formatted. Run 'az bicep format --file infra/main.bicep'"
             exit 1
