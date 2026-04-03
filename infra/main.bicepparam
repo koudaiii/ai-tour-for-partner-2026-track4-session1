@@ -1,6 +1,7 @@
 using 'main.bicep'
 
-param storageAccountName = 'privateisu${uniqueString(readEnvironmentVariable('AZURE_RESOURCE_GROUP', 'default'))}'
+param nowYyyymmddHhmm = readEnvironmentVariable('NOW_YYYYMMDDHHMM', '000000000000')
+param storageAccountName = 'privateisu${uniqueString('rg-private-isu-${readEnvironmentVariable('NOW_YYYYMMDDHHMM', '000000000000')}')}'
 param containerName = 'images'
 param tags = {
   project: 'private-isu'

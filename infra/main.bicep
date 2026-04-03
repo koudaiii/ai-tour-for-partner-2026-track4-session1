@@ -1,13 +1,18 @@
 ////////////
 // Metadata
 ////////////
+targetScope = 'subscription'
+
 metadata description = 'Deploy Azure Storage Account and Blob Container for private-isu image storage'
 
 ////////////
 // Parameters
 ////////////
 @description('The Azure region for resource deployment')
-param location string = resourceGroup().location
+param location string = 'japaneast'
+
+@description('Date suffix for resource group name (YYYYMMDDHHmm format)')
+param nowYyyymmddHhmm string
 
 @description('Name of the Storage Account (must be globally unique, 3-24 lowercase alphanumeric)')
 @minLength(3)
@@ -21,10 +26,22 @@ param containerName string = 'images'
 param tags object = {}
 
 ////////////
+// Variables
+////////////
+var resourceGroupName = 'rg-private-isu-${nowYyyymmddHhmm}'
+
+////////////
 // Resources / Modules
 ////////////
+resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: resourceGroupName
+  location: location
+  tags: tags
+}
+
 module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
   name: 'storageAccountDeployment'
+  scope: rg
   params: {
     name: storageAccountName
     location: location
@@ -49,6 +66,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
 ////////////
 // Outputs
 ////////////
+@description('The resource group name')
+output resourceGroupName string = rg.name
+
 @description('The primary blob endpoint URL')
 output blobEndpoint string = storageAccount.outputs.primaryBlobEndpoint
 
@@ -60,3 +80,4 @@ output storageAccountName string = storageAccount.outputs.name
 
 @description('The Storage Account resource ID')
 output storageAccountId string = storageAccount.outputs.resourceId
+

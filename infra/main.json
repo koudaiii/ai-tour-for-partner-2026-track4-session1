@@ -1,21 +1,27 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
   "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "11449344951131936529"
+      "templateHash": "17913613612168014648"
     },
     "description": "Deploy Azure Storage Account and Blob Container for private-isu image storage"
   },
   "parameters": {
     "location": {
       "type": "string",
-      "defaultValue": "[resourceGroup().location]",
+      "defaultValue": "japaneast",
       "metadata": {
         "description": "The Azure region for resource deployment"
+      }
+    },
+    "nowYyyymmddHhmm": {
+      "type": "string",
+      "metadata": {
+        "description": "Date suffix for resource group name (YYYYMMDDHHmm format)"
       }
     },
     "storageAccountName": {
@@ -41,11 +47,22 @@
       }
     }
   },
+  "variables": {
+    "resourceGroupName": "[format('rg-private-isu-{0}', parameters('nowYyyymmddHhmm'))]"
+  },
   "resources": {
+    "rg": {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('resourceGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]"
+    },
     "storageAccount": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "storageAccountDeployment",
+      "resourceGroup": "[variables('resourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -8196,10 +8213,20 @@
             }
           }
         }
-      }
+      },
+      "dependsOn": [
+        "rg"
+      ]
     }
   },
   "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource group name"
+      },
+      "value": "[variables('resourceGroupName')]"
+    },
     "blobEndpoint": {
       "type": "string",
       "metadata": {
