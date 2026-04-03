@@ -19,6 +19,51 @@ from pymemcache.client.base import Client as MemcacheClient
 UPLOAD_LIMIT = 10 * 1024 * 1024  # 10mb
 POSTS_PER_PAGE = 20
 
+AZURE_STORAGE_CONTAINER_NAME = os.environ.get("AZURE_STORAGE_CONTAINER_NAME", "images")
+
+_blob_service_client = None
+
+
+def blob_service_client():
+    global _blob_service_client
+    if _blob_service_client is not None:
+        return _blob_service_client
+
+    conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    account_url = os.environ.get("AZURE_STORAGE_ACCOUNT_URL")
+
+    if conn_str:
+        _blob_service_client = BlobServiceClient.from_connection_string(conn_str)
+    elif account_url:
+        _blob_service_client = BlobServiceClient(account_url, credential=DefaultAzureCredential())
+
+    return _blob_service_client
+
+
+def blob_container_client():
+    client = blob_service_client()
+    if client is None:
+        return None
+    return client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+
+
+def _mime_to_ext(mime):
+    if mime == "image/jpeg":
+        return ".jpg"
+    elif mime == "image/png":
+        return ".png"
+    elif mime == "image/gif":
+        return ".gif"
+    return ""
+
+
+def get_blob_url(post_id, mime):
+    client = blob_service_client()
+    if client is None:
+        return None
+    ext = _mime_to_ext(mime)
+    return f"{client.url}{AZURE_STORAGE_CONTAINER_NAME}/{post_id}{ext}"
+
 
 _config = None
 
