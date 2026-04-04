@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NOW_YYYYMMDDHHMM="$(date +%Y%m%d%H%M)"
+TEMPLATE_FILE="${ROOT_DIR}/infra/main.bicep"
+TAGS_JSON='{"CostControl":"ignore","SecurityControl":"ignore","GitHub Repository":"koudaiii/ai-tour-for-partner-2026-track4-session1"}'
+ENV_FILE="${ROOT_DIR}/.env"
+
+usage() {
+  cat <<'EOF'
+Usage: script/deploy-infra [options]
+
+Deploy infrastructure defined in infra/main.bicep.
+
+Options:
+  --location LOCATION         Azure location for subscription deployment (default: japaneast)
+  --deployment-name NAME      Deployment name (default: private-isu-infra-YYYYMMDDHHmm)
+  --date-suffix VALUE         nowYyyymmddHhmm parameter value (default: YYYYMMDDHHmm)
+  --storage-account NAME      storageAccountName parameter value
+  --container-name NAME       containerName parameter value (default: images)
+  --dry-run                   Run what-if instead of create
+  -h, --help                  Show this help
+EOF
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "Error: '${cmd}' is required but not installed." >&2
+    exit 1
+  fi
+}
+
+log() {
+  echo "[deploy-infra] $*"
+}
+
+log_resolved_parameters() {
+  log "Resolved parameters:"
+  log "LOCATION=${LOCATION}"
+  log "DEPLOYMENT_NAME=${DEPLOYMENT_NAME}"
+  log "DATE_SUFFIX=${DATE_SUFFIX}"
+  log "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}"
+  log "CONTAINER_NAME=${CONTAINER_NAME}"
+  log "TAGS_JSON=${TAGS_JSON}"
+}
+
+print_application_env() {
+  local account_url
+  account_url="https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/"
+  log "Application environment variables (KEY=VALUE):"
+  echo "AZURE_STORAGE_ACCOUNT_URL=${account_url}"
+  echo "AZURE_STORAGE_CONTAINER_NAME=${CONTAINER_NAME}"
+}
+
+write_application_env_file() {
+  local account_url tmp_file
+  account_url="https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/"
+  tmp_file="$(mktemp)"
+
+  touch "${ENV_FILE}"
+  grep -vE '^(AZURE_STORAGE_ACCOUNT_URL|AZURE_STORAGE_CONTAINER_NAME)=' "${ENV_FILE}" > "${tmp_file}" || true
+  {
+    cat "${tmp_file}"
+    echo "AZURE_STORAGE_ACCOUNT_URL=${account_url}"
+    echo "AZURE_STORAGE_CONTAINER_NAME=${CONTAINER_NAME}"
+  } > "${ENV_FILE}"
+  rm -f "${tmp_file}"
+
+  log "Updated ${ENV_FILE} with Azure storage environment variables"
+}
+
+run_az() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    local first=1
+    local arg
+    for arg in az "$@"; do
+      if [[ "${first}" -eq 1 ]]; then
+        printf '%q' "${arg}"
+        first=0
+      else
+        printf ' %q' "${arg}"
+      fi
+    done
+    printf '\n'
+    return 0
+  fi
+  az "$@"
+}
+
+ensure_azure_login() {
+  if ! az account show --output none >/dev/null 2>&1; then
+    echo "Error: Azure login required. Run 'az login' first." >&2
+    exit 1
+  fi
+  local account
+  account="$(az account show --query '{user:user.name,subscription:name}' -o tsv 2>/dev/null | tr '\t' ' ')"
+  log "Azure login confirmed: ${account}"
+}
+
+generate_storage_account_name() {
+  local suffix rand
+  suffix="${DATE_SUFFIX}"
+  rand="$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 2)"
+  echo "privateisu${suffix}${rand}" | cut -c1-24
+}
+
+LOCATION="japaneast"
+DATE_SUFFIX="${NOW_YYYYMMDDHHMM}"
+DEPLOYMENT_NAME="private-isu-infra-${NOW_YYYYMMDDHHMM}"
+STORAGE_ACCOUNT_NAME=""
+CONTAINER_NAME="images"
+DRY_RUN=0
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --location)
+        LOCATION="${2:-}"
+        shift 2
+        ;;
+      --deployment-name)
+        DEPLOYMENT_NAME="${2:-}"
+        shift 2
+        ;;
+      --date-suffix)
+        DATE_SUFFIX="${2:-}"
+        shift 2
+        ;;
+      --storage-account)
+        STORAGE_ACCOUNT_NAME="${2:-}"
+        shift 2
+        ;;
+      --container-name)
+        CONTAINER_NAME="${2:-}"
+        shift 2
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Error: unknown option '$1'" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  done
+}
+
+validate_inputs() {
+  if [[ ! -f "${TEMPLATE_FILE}" ]]; then
+    echo "Error: template file not found: ${TEMPLATE_FILE}" >&2
+    exit 1
+  fi
+  if [[ ! "${DATE_SUFFIX}" =~ ^[0-9]{12}$ ]]; then
+    echo "Error: --date-suffix must be 12 digits (YYYYMMDDHHmm)." >&2
+    exit 1
+  fi
+
+  if [[ -z "${STORAGE_ACCOUNT_NAME}" ]]; then
+    STORAGE_ACCOUNT_NAME="$(generate_storage_account_name)"
+  fi
+  if [[ ! "${STORAGE_ACCOUNT_NAME}" =~ ^[a-z0-9]{3,24}$ ]]; then
+    echo "Error: --storage-account must be 3-24 chars of lowercase letters and digits." >&2
+    exit 1
+  fi
+}
+
+main() {
+  parse_args "$@"
+  require_cmd az
+  ensure_azure_login
+  validate_inputs
+
+  local -a deploy_cmd=(
+    deployment sub create
+    --name "${DEPLOYMENT_NAME}"
+    --location "${LOCATION}"
+    --template-file "${TEMPLATE_FILE}"
+    --parameters
+    "nowYyyymmddHhmm=${DATE_SUFFIX}"
+    "storageAccountName=${STORAGE_ACCOUNT_NAME}"
+    "containerName=${CONTAINER_NAME}"
+    "tags=${TAGS_JSON}"
+  )
+
+  log_resolved_parameters
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    local -a what_if_cmd=(
+      deployment sub what-if
+      --name "${DEPLOYMENT_NAME}"
+      --location "${LOCATION}"
+      --template-file "${TEMPLATE_FILE}"
+      --parameters
+      "nowYyyymmddHhmm=${DATE_SUFFIX}"
+      "storageAccountName=${STORAGE_ACCOUNT_NAME}"
+      "containerName=${CONTAINER_NAME}"
+      "tags=${TAGS_JSON}"
+    )
+    log "Running what-if (no changes applied)"
+    run_az "${what_if_cmd[@]}"
+    print_application_env
+    return 0
+  fi
+
+  log "Deploying infra with name=${DEPLOYMENT_NAME}, location=${LOCATION}"
+  run_az "${deploy_cmd[@]}"
+  log "Deployment completed"
+  print_application_env
+  write_application_env_file
+}
+
+main "$@"

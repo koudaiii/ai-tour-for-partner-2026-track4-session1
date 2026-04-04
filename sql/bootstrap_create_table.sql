@@ -17,6 +17,7 @@ CREATE TABLE posts (
   mime varchar(64) NOT NULL,
   imgdata bytea NOT NULL,
   body text NOT NULL,
+  img_blob_key text,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
