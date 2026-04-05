@@ -19,6 +19,14 @@ Options:
   --date-suffix VALUE         nowYyyymmddHhmm parameter value (default: YYYYMMDDHHmm)
   --storage-account NAME      storageAccountName parameter value
   --container-name NAME       containerName parameter value (default: images)
+  --postgres-server NAME      postgresServerName parameter value
+  --postgres-admin-user NAME  postgresAdminUser parameter value (default: isuconp)
+  --postgres-password VALUE   postgresAdminPassword parameter value (default: auto-generated)
+  --postgres-db-name NAME     postgresDatabaseName parameter value (default: isuconp)
+  --postgres-version VALUE    postgresVersion parameter value (default: 18; only 18 is supported)
+  --postgres-tier VALUE       postgresTier parameter value (default: Burstable)
+  --postgres-sku NAME         postgresSkuName parameter value (default: Standard_B1ms)
+  --postgres-storage-gb NUM   postgresStorageSizeGB parameter value (default: 32)
   --dry-run                   Run what-if instead of create
   -h, --help                  Show this help
 EOF
@@ -43,32 +51,53 @@ log_resolved_parameters() {
   log "DATE_SUFFIX=${DATE_SUFFIX}"
   log "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}"
   log "CONTAINER_NAME=${CONTAINER_NAME}"
+  log "POSTGRES_SERVER_NAME=${POSTGRES_SERVER_NAME}"
+  log "POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}"
+  log "POSTGRES_DB_NAME=${POSTGRES_DB_NAME}"
+  log "POSTGRES_VERSION=${POSTGRES_VERSION}"
+  log "POSTGRES_TIER=${POSTGRES_TIER}"
+  log "POSTGRES_SKU_NAME=${POSTGRES_SKU_NAME}"
+  log "POSTGRES_STORAGE_GB=${POSTGRES_STORAGE_GB}"
+  log "POSTGRES_ADMIN_PASSWORD=***"
   log "TAGS_JSON=${TAGS_JSON}"
 }
 
 print_application_env() {
   local account_url
   account_url="https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/"
+  local postgres_host
+  postgres_host="${POSTGRES_SERVER_NAME}.postgres.database.azure.com"
   log "Application environment variables (KEY=VALUE):"
   echo "AZURE_STORAGE_ACCOUNT_URL=${account_url}"
   echo "AZURE_STORAGE_CONTAINER_NAME=${CONTAINER_NAME}"
+  echo "ISUCONP_DB_HOST=${postgres_host}"
+  echo "ISUCONP_DB_PORT=5432"
+  echo "ISUCONP_DB_USER=${POSTGRES_ADMIN_USER}"
+  echo "ISUCONP_DB_PASSWORD=${POSTGRES_ADMIN_PASSWORD}"
+  echo "ISUCONP_DB_NAME=${POSTGRES_DB_NAME}"
 }
 
 write_application_env_file() {
-  local account_url tmp_file
+  local account_url postgres_host tmp_file
   account_url="https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/"
+  postgres_host="${POSTGRES_SERVER_NAME}.postgres.database.azure.com"
   tmp_file="$(mktemp)"
 
   touch "${ENV_FILE}"
-  grep -vE '^(AZURE_STORAGE_ACCOUNT_URL|AZURE_STORAGE_CONTAINER_NAME)=' "${ENV_FILE}" > "${tmp_file}" || true
+  grep -vE '^(AZURE_STORAGE_ACCOUNT_URL|AZURE_STORAGE_CONTAINER_NAME|ISUCONP_DB_HOST|ISUCONP_DB_PORT|ISUCONP_DB_USER|ISUCONP_DB_PASSWORD|ISUCONP_DB_NAME)=' "${ENV_FILE}" > "${tmp_file}" || true
   {
     cat "${tmp_file}"
     echo "AZURE_STORAGE_ACCOUNT_URL=${account_url}"
     echo "AZURE_STORAGE_CONTAINER_NAME=${CONTAINER_NAME}"
+    echo "ISUCONP_DB_HOST=${postgres_host}"
+    echo "ISUCONP_DB_PORT=5432"
+    echo "ISUCONP_DB_USER=${POSTGRES_ADMIN_USER}"
+    echo "ISUCONP_DB_PASSWORD=${POSTGRES_ADMIN_PASSWORD}"
+    echo "ISUCONP_DB_NAME=${POSTGRES_DB_NAME}"
   } > "${ENV_FILE}"
   rm -f "${tmp_file}"
 
-  log "Updated ${ENV_FILE} with Azure storage environment variables"
+  log "Updated ${ENV_FILE} with Azure storage and PostgreSQL environment variables"
 }
 
 run_az() {
@@ -106,11 +135,36 @@ generate_storage_account_name() {
   echo "privateisu${suffix}${rand}" | cut -c1-24
 }
 
+generate_postgres_server_name() {
+  local suffix rand
+  suffix="${DATE_SUFFIX}"
+  rand="$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 4)"
+  echo "privateisu-pg-${suffix}-${rand}" | cut -c1-63
+}
+
+generate_postgres_password() {
+  local upper lower digit special rest
+  upper="$(LC_ALL=C tr -dc 'A-Z' </dev/urandom | head -c 1)"
+  lower="$(LC_ALL=C tr -dc 'a-z' </dev/urandom | head -c 1)"
+  digit="$(LC_ALL=C tr -dc '0-9' </dev/urandom | head -c 1)"
+  special='!'
+  rest="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)"
+  echo "${upper}${lower}${digit}${special}${rest}"
+}
+
 LOCATION="japaneast"
 DATE_SUFFIX="${NOW_YYYYMMDDHHMM}"
 DEPLOYMENT_NAME="private-isu-infra-${NOW_YYYYMMDDHHMM}"
 STORAGE_ACCOUNT_NAME=""
 CONTAINER_NAME="images"
+POSTGRES_SERVER_NAME=""
+POSTGRES_ADMIN_USER="isuconp"
+POSTGRES_ADMIN_PASSWORD=""
+POSTGRES_DB_NAME="isuconp"
+POSTGRES_VERSION="18"
+POSTGRES_TIER="Burstable"
+POSTGRES_SKU_NAME="Standard_B1ms"
+POSTGRES_STORAGE_GB="32"
 DRY_RUN=0
 
 parse_args() {
@@ -134,6 +188,38 @@ parse_args() {
         ;;
       --container-name)
         CONTAINER_NAME="${2:-}"
+        shift 2
+        ;;
+      --postgres-server)
+        POSTGRES_SERVER_NAME="${2:-}"
+        shift 2
+        ;;
+      --postgres-admin-user)
+        POSTGRES_ADMIN_USER="${2:-}"
+        shift 2
+        ;;
+      --postgres-password)
+        POSTGRES_ADMIN_PASSWORD="${2:-}"
+        shift 2
+        ;;
+      --postgres-db-name)
+        POSTGRES_DB_NAME="${2:-}"
+        shift 2
+        ;;
+      --postgres-version)
+        POSTGRES_VERSION="${2:-}"
+        shift 2
+        ;;
+      --postgres-tier)
+        POSTGRES_TIER="${2:-}"
+        shift 2
+        ;;
+      --postgres-sku)
+        POSTGRES_SKU_NAME="${2:-}"
+        shift 2
+        ;;
+      --postgres-storage-gb)
+        POSTGRES_STORAGE_GB="${2:-}"
         shift 2
         ;;
       --dry-run)
@@ -170,6 +256,33 @@ validate_inputs() {
     echo "Error: --storage-account must be 3-24 chars of lowercase letters and digits." >&2
     exit 1
   fi
+
+  if [[ -z "${POSTGRES_SERVER_NAME}" ]]; then
+    POSTGRES_SERVER_NAME="$(generate_postgres_server_name)"
+  fi
+  if [[ ! "${POSTGRES_SERVER_NAME}" =~ ^[a-z0-9-]{3,63}$ ]]; then
+    echo "Error: --postgres-server must be 3-63 chars of lowercase letters, digits, and hyphens." >&2
+    exit 1
+  fi
+  if [[ ! "${POSTGRES_SERVER_NAME}" =~ ^[a-z0-9].*[a-z0-9]$ ]]; then
+    echo "Error: --postgres-server must start and end with lowercase letter or digit." >&2
+    exit 1
+  fi
+  if [[ -z "${POSTGRES_ADMIN_PASSWORD}" ]]; then
+    POSTGRES_ADMIN_PASSWORD="$(generate_postgres_password)"
+  fi
+  if [[ ! "${POSTGRES_VERSION}" =~ ^18$ ]]; then
+    echo "Error: --postgres-version must be 18." >&2
+    exit 1
+  fi
+  if [[ ! "${POSTGRES_TIER}" =~ ^(Burstable|GeneralPurpose|MemoryOptimized)$ ]]; then
+    echo "Error: --postgres-tier must be one of: Burstable, GeneralPurpose, MemoryOptimized." >&2
+    exit 1
+  fi
+  if [[ ! "${POSTGRES_STORAGE_GB}" =~ ^[0-9]+$ ]]; then
+    echo "Error: --postgres-storage-gb must be an integer." >&2
+    exit 1
+  fi
 }
 
 main() {
@@ -187,6 +300,14 @@ main() {
     "nowYyyymmddHhmm=${DATE_SUFFIX}"
     "storageAccountName=${STORAGE_ACCOUNT_NAME}"
     "containerName=${CONTAINER_NAME}"
+    "postgresServerName=${POSTGRES_SERVER_NAME}"
+    "postgresAdminUser=${POSTGRES_ADMIN_USER}"
+    "postgresAdminPassword=${POSTGRES_ADMIN_PASSWORD}"
+    "postgresDatabaseName=${POSTGRES_DB_NAME}"
+    "postgresVersion=${POSTGRES_VERSION}"
+    "postgresTier=${POSTGRES_TIER}"
+    "postgresSkuName=${POSTGRES_SKU_NAME}"
+    "postgresStorageSizeGB=${POSTGRES_STORAGE_GB}"
     "tags=${TAGS_JSON}"
   )
 
@@ -202,6 +323,14 @@ main() {
       "nowYyyymmddHhmm=${DATE_SUFFIX}"
       "storageAccountName=${STORAGE_ACCOUNT_NAME}"
       "containerName=${CONTAINER_NAME}"
+      "postgresServerName=${POSTGRES_SERVER_NAME}"
+      "postgresAdminUser=${POSTGRES_ADMIN_USER}"
+      "postgresAdminPassword=${POSTGRES_ADMIN_PASSWORD}"
+      "postgresDatabaseName=${POSTGRES_DB_NAME}"
+      "postgresVersion=${POSTGRES_VERSION}"
+      "postgresTier=${POSTGRES_TIER}"
+      "postgresSkuName=${POSTGRES_SKU_NAME}"
+      "postgresStorageSizeGB=${POSTGRES_STORAGE_GB}"
       "tags=${TAGS_JSON}"
     )
     log "Running what-if (no changes applied)"

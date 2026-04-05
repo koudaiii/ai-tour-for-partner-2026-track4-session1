@@ -3,7 +3,7 @@
 ////////////
 targetScope = 'subscription'
 
-metadata description = 'Deploy Azure Storage Account and Blob Container for private-isu image storage'
+metadata description = 'Deploy Azure Storage Account + Azure Database for PostgreSQL Flexible Server for private-isu'
 
 ////////////
 // Parameters
@@ -21,6 +21,41 @@ param storageAccountName string
 
 @description('Name of the blob container for storing images')
 param containerName string = 'images'
+
+@description('Name of the PostgreSQL Flexible Server (3-63 lowercase alphanumeric or hyphen)')
+@minLength(3)
+@maxLength(63)
+param postgresServerName string
+
+@description('PostgreSQL administrator login')
+param postgresAdminUser string = 'isuconp'
+
+@description('PostgreSQL administrator password')
+@secure()
+param postgresAdminPassword string
+
+@description('Application database name in PostgreSQL')
+param postgresDatabaseName string = 'isuconp'
+
+@description('PostgreSQL server version')
+@allowed([
+  '18'
+])
+param postgresVersion string = '18'
+
+@description('PostgreSQL compute tier')
+@allowed([
+  'Burstable'
+  'GeneralPurpose'
+  'MemoryOptimized'
+])
+param postgresTier string = 'Burstable'
+
+@description('PostgreSQL SKU name')
+param postgresSkuName string = 'Standard_B1ms'
+
+@description('PostgreSQL storage size in GiB')
+param postgresStorageSizeGB int = 32
 
 @description('Tags to apply to all resources')
 param tags object = {}
@@ -63,6 +98,23 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
   }
 }
 
+module postgres 'postgresql.bicep' = {
+  name: 'postgresDeployment'
+  scope: rg
+  params: {
+    location: location
+    tags: tags
+    postgresServerName: postgresServerName
+    postgresAdminUser: postgresAdminUser
+    postgresAdminPassword: postgresAdminPassword
+    postgresDatabaseName: postgresDatabaseName
+    postgresVersion: postgresVersion
+    postgresTier: postgresTier
+    postgresSkuName: postgresSkuName
+    postgresStorageSizeGB: postgresStorageSizeGB
+  }
+}
+
 ////////////
 // Outputs
 ////////////
@@ -81,3 +133,17 @@ output storageAccountName string = storageAccount.outputs.name
 @description('The Storage Account resource ID')
 output storageAccountId string = storageAccount.outputs.resourceId
 
+@description('PostgreSQL flexible server name')
+output postgresServerName string = postgres.outputs.postgresServerName
+
+@description('PostgreSQL flexible server host FQDN')
+output postgresHost string = postgres.outputs.postgresHost
+
+@description('PostgreSQL port')
+output postgresPort int = postgres.outputs.postgresPort
+
+@description('PostgreSQL admin login')
+output postgresAdminLogin string = postgres.outputs.postgresAdminLogin
+
+@description('PostgreSQL database name')
+output postgresDatabaseName string = postgres.outputs.postgresDatabaseName
