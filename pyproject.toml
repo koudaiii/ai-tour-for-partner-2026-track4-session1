@@ -1,7 +1,7 @@
 [project]
-name = "private-isu"
+name = "ai-tour-for-partner-2026-track4-session1"
 version = "0.1.0"
-description = "private-isu webapp implementation for Python"
+description = "AI Tour for Partners 2026 track4 session1 webapp from private-isu webapp implementation for Python"
 readme = "README.md"
 requires-python = ">=3.14.3"
 dependencies = [
