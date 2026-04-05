@@ -43,7 +43,7 @@ services:
           memory: 1g
 
   postgres:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_USER: isuconp
       POSTGRES_PASSWORD: isuconp
