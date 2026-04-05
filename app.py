@@ -5,10 +5,14 @@ import re
 import shlex
 import subprocess
 import tempfile
+import uuid
 
 import flask
 import psycopg2
 import psycopg2.extras
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient, ContentSettings
+from dotenv import load_dotenv
 from flask_session import Session
 from jinja2 import pass_eval_context
 from markupsafe import Markup, escape
@@ -16,6 +20,52 @@ from pymemcache.client.base import Client as MemcacheClient
 
 UPLOAD_LIMIT = 10 * 1024 * 1024  # 10mb
 POSTS_PER_PAGE = 20
+
+load_dotenv()
+
+AZURE_STORAGE_CONTAINER_NAME = os.environ.get("AZURE_STORAGE_CONTAINER_NAME", "images")
+
+_blob_service_client = None
+
+
+def blob_service_client():
+    global _blob_service_client
+    if _blob_service_client is not None:
+        return _blob_service_client
+
+    conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    account_url = os.environ.get("AZURE_STORAGE_ACCOUNT_URL")
+
+    if conn_str:
+        _blob_service_client = BlobServiceClient.from_connection_string(conn_str)
+    elif account_url:
+        _blob_service_client = BlobServiceClient(account_url, credential=DefaultAzureCredential())
+
+    return _blob_service_client
+
+
+def blob_container_client():
+    client = blob_service_client()
+    if client is None:
+        return None
+    return client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+
+
+def _mime_to_ext(mime):
+    if mime == "image/jpeg":
+        return ".jpg"
+    elif mime == "image/png":
+        return ".png"
+    elif mime == "image/gif":
+        return ".gif"
+    return ""
+
+
+def get_blob_url(blob_key):
+    client = blob_service_client()
+    if client is None:
+        return None
+    return f"{client.url}{AZURE_STORAGE_CONTAINER_NAME}/{blob_key}"
 
 
 _config = None
@@ -181,15 +231,13 @@ Session(app)
 
 @app.template_global()
 def image_url(post):
-    ext = ""
-    mime = post["mime"]
-    if mime == "image/jpeg":
-        ext = ".jpg"
-    elif mime == "image/png":
-        ext = ".png"
-    elif mime == "image/gif":
-        ext = ".gif"
+    blob_key = post.get("img_blob_key")
+    if blob_key:
+        blob_url = get_blob_url(blob_key)
+        if blob_url:
+            return blob_url
 
+    ext = _mime_to_ext(post["mime"])
     return "/image/%s%s" % (post["id"], ext)
 
 
@@ -412,9 +460,23 @@ def post_index():
         tempf.seek(0)
         imgdata = tempf.read()
 
-    query = "INSERT INTO posts (user_id, mime, imgdata, body) VALUES (%s,%s,%s,%s) RETURNING id"
+    container = blob_container_client()
     cursor = db().cursor()
-    cursor.execute(query, (me["id"], mime, imgdata, flask.request.form.get("body")))
+
+    if container:
+        blob_key = f"{uuid.uuid4()}{_mime_to_ext(mime)}"
+        container.upload_blob(
+            blob_key,
+            imgdata,
+            content_settings=ContentSettings(content_type=mime),
+            overwrite=True,
+        )
+        query = "INSERT INTO posts (user_id, mime, imgdata, body, img_blob_key) VALUES (%s,%s,%s,%s,%s) RETURNING id"
+        cursor.execute(query, (me["id"], mime, b"", flask.request.form.get("body"), blob_key))
+    else:
+        query = "INSERT INTO posts (user_id, mime, imgdata, body) VALUES (%s,%s,%s,%s) RETURNING id"
+        cursor.execute(query, (me["id"], mime, imgdata, flask.request.form.get("body")))
+
     pid = cursor.fetchone()["id"]
     return flask.redirect("/posts/%d" % pid)
 
@@ -430,6 +492,12 @@ def get_image(id, ext):
     cursor = db().cursor()
     cursor.execute("SELECT * FROM posts WHERE id = %s", (id,))
     post = cursor.fetchone()
+
+    blob_key = post.get("img_blob_key")
+    if blob_key:
+        blob_url = get_blob_url(blob_key)
+        if blob_url:
+            return flask.redirect(blob_url)
 
     mime = post["mime"]
     if (

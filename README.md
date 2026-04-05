@@ -41,6 +41,8 @@ script/destroy-vm
 - `script/restore`: Restore PostgreSQL dump
 - `script/backup`: Create PostgreSQL dump
 - `script/upload-to-github`: Upload dump file to GitHub Releases
+- `script/deploy-infra`: Deploy Azure infra from `infra/main.bicep`
+- `script/grant-storage-role`: Grant Blob data role to current Azure login for a storage account
 - `script/launch-vm`: Create Azure VM
 - `script/list-resource-groups`: List Resource Groups tagged for this repository
 - `script/destroy-vm`: Delete Resource Group(s)
@@ -60,3 +62,8 @@ For application details and full setup guidance, see:
 - [manual.md](manual.md)
 - [CLAUDE.md](CLAUDE.md)
 - [AGENTS.md](AGENTS.md)
+
+## Environment Variables
+
+- `.env.sample`: Template of supported environment variables
+- `.env`: Local environment file used for development
