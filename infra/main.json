@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "16400309633194328119"
+      "templateHash": "5793098599938942660"
     },
     "description": "Deploy Azure Storage Account + Azure Database for PostgreSQL Flexible Server for private-isu"
   },
@@ -8331,7 +8331,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "12361222070564496963"
+              "templateHash": "6598135960474079530"
             }
           },
           "parameters": {
@@ -8444,6 +8444,12 @@
                   "administratorLoginPassword": {
                     "value": "[parameters('postgresAdminPassword')]"
                   },
+                  "authConfig": {
+                    "value": {
+                      "activeDirectoryAuth": "Enabled",
+                      "passwordAuth": "Enabled"
+                    }
+                  },
                   "version": {
                     "value": "[parameters('postgresVersion')]"
                   },
@@ -8454,6 +8460,9 @@
                     "value": 7
                   },
                   "geoRedundantBackup": {
+                    "value": "Disabled"
+                  },
+                  "highAvailability": {
                     "value": "Disabled"
                   },
                   "publicNetworkAccess": {

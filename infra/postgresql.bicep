@@ -50,10 +50,15 @@ module postgresServer 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.15
     tier: postgresTier
     administratorLogin: postgresAdminUser
     administratorLoginPassword: postgresAdminPassword
+    authConfig: {
+      activeDirectoryAuth: 'Enabled'
+      passwordAuth: 'Enabled'
+    }
     version: postgresVersion
     storageSizeGB: postgresStorageSizeGB
     backupRetentionDays: 7
     geoRedundantBackup: 'Disabled'
+    highAvailability: 'Disabled'
     publicNetworkAccess: 'Enabled'
     firewallRules: [
       {
