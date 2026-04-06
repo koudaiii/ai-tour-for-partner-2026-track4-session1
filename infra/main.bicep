@@ -147,3 +147,4 @@ output postgresAdminLogin string = postgres.outputs.postgresAdminLogin
 
 @description('PostgreSQL database name')
 output postgresDatabaseName string = postgres.outputs.postgresDatabaseName
+
