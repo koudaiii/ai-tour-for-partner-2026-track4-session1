@@ -36,6 +36,17 @@ log() {
   echo "[backup] $*"
 }
 
+load_env_file() {
+  local env_file="${ROOT_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    log "Loading environment from ${env_file}"
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+}
+
 PG_DUMP_COMMON_OPTS=(
   -Fc
   -Z9
@@ -65,6 +76,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+load_env_file
 
 require_cmd pg_dump
 require_cmd bzip2

@@ -33,6 +33,29 @@ log() {
   echo "[bootstrap] $*"
 }
 
+ensure_env_file() {
+  local env_file="${ROOT_DIR}/.env"
+  local sample_file="${ROOT_DIR}/.env.sample"
+  if [[ -f "${env_file}" ]]; then
+    return 0
+  fi
+  if [[ -f "${sample_file}" ]]; then
+    cp "${sample_file}" "${env_file}"
+    log "Created ${env_file} from ${sample_file}"
+  fi
+}
+
+load_env_file() {
+  local env_file="${ROOT_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    log "Loading environment from ${env_file}"
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+}
+
 error_exit() {
   echo "Error: $*" >&2
   exit 1
@@ -391,6 +414,8 @@ for arg in "$@"; do
 done
 
 cd "${ROOT_DIR}"
+ensure_env_file
+load_env_file
 
 export ISUCONP_DB_HOST="${ISUCONP_DB_HOST:-}"
 export ISUCONP_DB_PORT="${ISUCONP_DB_PORT:-}"
@@ -401,10 +426,6 @@ export ISUCONP_MEMCACHED_ADDRESS="${ISUCONP_MEMCACHED_ADDRESS:-127.0.0.1:11211}"
 export ISUCONP_DATABASE_URL="${ISUCONP_DATABASE_URL:-}"
 
 if [[ -z "${ISUCONP_DATABASE_URL}" ]]; then
-  FIXED_DB_USER="isuconp"
-  FIXED_DB_PASSWORD="isuconp"
-  FIXED_DB_NAME="isuconp"
-
   if [[ -z "${ISUCONP_DB_HOST}" ]]; then
     export ISUCONP_DB_HOST="localhost"
     DEFAULTED_DB_HOST=1
@@ -415,25 +436,16 @@ if [[ -z "${ISUCONP_DATABASE_URL}" ]]; then
     log "ISUCONP_DB_PORT is not set. Using default: 5432"
   fi
   if [[ -z "${ISUCONP_DB_USER}" ]]; then
-    export ISUCONP_DB_USER="${FIXED_DB_USER}"
-    log "ISUCONP_DB_USER is not set. Using fixed value: ${FIXED_DB_USER}"
-  elif [[ "${ISUCONP_DB_USER}" != "${FIXED_DB_USER}" ]]; then
-    log "ISUCONP_DB_USER='${ISUCONP_DB_USER}' is overridden to fixed value: ${FIXED_DB_USER}"
-    export ISUCONP_DB_USER="${FIXED_DB_USER}"
+    export ISUCONP_DB_USER="isuconp"
+    log "ISUCONP_DB_USER is not set. Using default: isuconp"
   fi
   if [[ -z "${ISUCONP_DB_PASSWORD}" ]]; then
-    export ISUCONP_DB_PASSWORD="${FIXED_DB_PASSWORD}"
-    log "ISUCONP_DB_PASSWORD is not set. Using fixed value: ${FIXED_DB_PASSWORD}"
-  elif [[ "${ISUCONP_DB_PASSWORD}" != "${FIXED_DB_PASSWORD}" ]]; then
-    log "ISUCONP_DB_PASSWORD is overridden to fixed value for bootstrap checks"
-    export ISUCONP_DB_PASSWORD="${FIXED_DB_PASSWORD}"
+    export ISUCONP_DB_PASSWORD="isuconp"
+    log "ISUCONP_DB_PASSWORD is not set. Using default: isuconp"
   fi
   if [[ -z "${ISUCONP_DB_NAME}" ]]; then
-    export ISUCONP_DB_NAME="${FIXED_DB_NAME}"
-    log "ISUCONP_DB_NAME is not set. Using fixed value: ${FIXED_DB_NAME}"
-  elif [[ "${ISUCONP_DB_NAME}" != "${FIXED_DB_NAME}" ]]; then
-    log "ISUCONP_DB_NAME='${ISUCONP_DB_NAME}' is overridden to fixed value: ${FIXED_DB_NAME}"
-    export ISUCONP_DB_NAME="${FIXED_DB_NAME}"
+    export ISUCONP_DB_NAME="isuconp"
+    log "ISUCONP_DB_NAME is not set. Using default: isuconp"
   fi
 fi
 

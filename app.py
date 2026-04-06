@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import pathlib
 import re
@@ -69,6 +70,7 @@ def get_blob_url(blob_key):
 
 
 _config = None
+logger = logging.getLogger(__name__)
 
 
 def config():
@@ -90,6 +92,14 @@ def config():
         password = os.environ.get("ISUCONP_DB_PASSWORD")
         if password:
             _config["db"]["password"] = password
+        logger.info(
+            "Using DB %s@%s:%s/%s",
+            _config["db"]["user"],
+            _config["db"]["host"],
+            _config["db"]["port"],
+            _config["db"]["dbname"],
+        )
+        logger.info("Using Memcached %s", _config["memcache"]["address"])
     return _config
 
 

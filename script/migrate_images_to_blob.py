@@ -26,6 +26,7 @@ import psycopg2
 import psycopg2.extras
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings
+from dotenv import load_dotenv
 
 
 def _mime_to_ext(mime):
@@ -39,6 +40,9 @@ def _mime_to_ext(mime):
 
 
 def main():
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv(os.path.join(root_dir, ".env"))
+
     # Setup Blob Storage client
     conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
     account_url = os.environ.get("AZURE_STORAGE_ACCOUNT_URL")

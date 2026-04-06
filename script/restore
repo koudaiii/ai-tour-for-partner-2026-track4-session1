@@ -11,6 +11,17 @@ RESTORE_COMMON_OPTS=(
   --no-privileges
 )
 
+load_env_file() {
+  local env_file="${ROOT_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    echo "[restore] loading environment from ${env_file}"
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+}
+
 run_fix_sequences() {
   if [[ ! -f "${FIX_SEQUENCES_SQL}" ]]; then
     echo "[restore] warning: sequence-fix SQL not found: ${FIX_SEQUENCES_SQL}" >&2
@@ -63,6 +74,8 @@ if [[ ! -f "${DUMP_PATH}" ]]; then
   echo "[restore] run 'make init' first or set DUMP_PATH" >&2
   exit 1
 fi
+
+load_env_file
 
 PG_RESTORE_BIN="$(resolve_pg_restore_bin)"
 
