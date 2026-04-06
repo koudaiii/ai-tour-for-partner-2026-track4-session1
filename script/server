@@ -18,10 +18,39 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-
 log() {
   echo "[server] $*"
 }
+
+load_env_file() {
+  local env_file="${ROOT_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    log "Loading environment from ${env_file}"
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+}
+
+check_db_connection() {
+  if ! command -v psql >/dev/null 2>&1; then
+    echo "Error: 'psql' is required for DB connection precheck." >&2
+    exit 1
+  fi
+
+  local output
+  local database_url="${ISUCONP_DATABASE_URL:-postgresql://isuconp:isuconp@127.0.0.1:5432/isuconp}"
+  local -a cmd=(psql "${database_url}" -v ON_ERROR_STOP=1 -Atqc "SELECT 1;")
+
+  log "Checking PostgreSQL connection before app start"
+  output="$("${cmd[@]}" 2>&1)" || {
+    echo "Error: PostgreSQL connection precheck failed: ${output}" >&2
+    exit 1
+  }
+}
+
+load_env_file
 
 UV_BIN=""
 if command -v uv >/dev/null 2>&1; then
@@ -54,18 +83,8 @@ fi
 GUNICORN_BIND="${ISUCONP_SERVER_BIND:-0.0.0.0:8080}"
 GUNICORN_APP="${ISUCONP_SERVER_APP:-app:app}"
 
-# Local defaults for app.py env vars.
-# Prefer IPv4 loopback to avoid accidental connection to a different IPv6 localhost PostgreSQL.
-export ISUCONP_DB_HOST="${ISUCONP_DB_HOST:-127.0.0.1}"
-export ISUCONP_DB_PORT="${ISUCONP_DB_PORT:-5432}"
-export ISUCONP_DB_USER="${ISUCONP_DB_USER:-isuconp}"
-export ISUCONP_DB_PASSWORD="${ISUCONP_DB_PASSWORD:-}"
-export ISUCONP_DB_NAME="${ISUCONP_DB_NAME:-isuconp}"
-export ISUCONP_MEMCACHED_ADDRESS="${ISUCONP_MEMCACHED_ADDRESS:-127.0.0.1:11211}"
-
+check_db_connection
 log "Starting gunicorn ${GUNICORN_APP} on ${GUNICORN_BIND}"
-log "Using DB ${ISUCONP_DB_USER}@${ISUCONP_DB_HOST}:${ISUCONP_DB_PORT}/${ISUCONP_DB_NAME}"
-log "Using Memcached ${ISUCONP_MEMCACHED_ADDRESS}"
 exec "${UV_BIN}" run gunicorn \
   "${GUNICORN_APP}" \
   -b "${GUNICORN_BIND}" \

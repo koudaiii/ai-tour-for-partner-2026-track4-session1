@@ -31,6 +31,16 @@ log() {
   echo "[grant-storage-role] $*"
 }
 
+load_env_file() {
+  if [[ -f "${ENV_FILE}" ]]; then
+    log "Loading environment from ${ENV_FILE}"
+    set -a
+    # shellcheck disable=SC1090
+    source "${ENV_FILE}"
+    set +a
+  fi
+}
+
 run_az() {
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     local first=1
@@ -60,13 +70,15 @@ ensure_azure_login() {
 }
 
 infer_storage_account_from_env() {
-  if [[ ! -f "${ENV_FILE}" ]]; then
-    return 1
-  fi
-  local account_url
-  account_url="$(sed -n 's/^AZURE_STORAGE_ACCOUNT_URL=//p' "${ENV_FILE}" | head -n1)"
+  local account_url="${AZURE_STORAGE_ACCOUNT_URL:-}"
   if [[ -z "${account_url}" ]]; then
-    return 1
+    if [[ ! -f "${ENV_FILE}" ]]; then
+      return 1
+    fi
+    account_url="$(sed -n 's/^AZURE_STORAGE_ACCOUNT_URL=//p' "${ENV_FILE}" | head -n1)"
+    if [[ -z "${account_url}" ]]; then
+      return 1
+    fi
   fi
   account_url="${account_url#https://}"
   account_url="${account_url#http://}"
@@ -152,6 +164,7 @@ main() {
   parse_args "$@"
   require_cmd az
   require_cmd sed
+  load_env_file
   ensure_azure_login
   validate_inputs
   resolve_assignee_object_id

@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import pathlib
 import re
@@ -69,27 +70,28 @@ def get_blob_url(blob_key):
 
 
 _config = None
+logger = logging.getLogger(__name__)
 
 
 def config():
     global _config
     if _config is None:
+        database_url = os.environ.get(
+            "ISUCONP_DATABASE_URL",
+            "postgresql://isuconp:isuconp@127.0.0.1:5432/isuconp",
+        )
+        db_conf = {"dsn": database_url}
+
         _config = {
-            "db": {
-                "host": os.environ.get("ISUCONP_DB_HOST", "localhost"),
-                "port": int(os.environ.get("ISUCONP_DB_PORT", "5432")),
-                "user": os.environ.get("ISUCONP_DB_USER", "isuconp"),
-                "dbname": os.environ.get("ISUCONP_DB_NAME", "isuconp"),
-            },
+            "db": db_conf,
             "memcache": {
                 "address": os.environ.get(
                     "ISUCONP_MEMCACHED_ADDRESS", "127.0.0.1:11211"
                 ),
             },
         }
-        password = os.environ.get("ISUCONP_DB_PASSWORD")
-        if password:
-            _config["db"]["password"] = password
+        logger.info("Using DB via ISUCONP_DATABASE_URL")
+        logger.info("Using Memcached %s", _config["memcache"]["address"])
     return _config
 
 
@@ -464,15 +466,20 @@ def post_index():
     cursor = db().cursor()
 
     if container:
-        blob_key = f"{uuid.uuid4()}{_mime_to_ext(mime)}"
-        container.upload_blob(
-            blob_key,
-            imgdata,
-            content_settings=ContentSettings(content_type=mime),
-            overwrite=True,
-        )
-        query = "INSERT INTO posts (user_id, mime, imgdata, body, img_blob_key) VALUES (%s,%s,%s,%s,%s) RETURNING id"
-        cursor.execute(query, (me["id"], mime, b"", flask.request.form.get("body"), blob_key))
+        try:
+            blob_key = f"{uuid.uuid4()}{_mime_to_ext(mime)}"
+            container.upload_blob(
+                blob_key,
+                imgdata,
+                content_settings=ContentSettings(content_type=mime),
+                overwrite=True,
+            )
+            query = "INSERT INTO posts (user_id, mime, imgdata, body, img_blob_key) VALUES (%s,%s,%s,%s,%s) RETURNING id"
+            cursor.execute(query, (me["id"], mime, b"", flask.request.form.get("body"), blob_key))
+        except Exception:
+            app.logger.exception("Blob upload failed. Falling back to DB imgdata storage.")
+            query = "INSERT INTO posts (user_id, mime, imgdata, body) VALUES (%s,%s,%s,%s) RETURNING id"
+            cursor.execute(query, (me["id"], mime, imgdata, flask.request.form.get("body")))
     else:
         query = "INSERT INTO posts (user_id, mime, imgdata, body) VALUES (%s,%s,%s,%s) RETURNING id"
         cursor.execute(query, (me["id"], mime, imgdata, flask.request.form.get("body")))
