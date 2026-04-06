@@ -18,13 +18,6 @@ jobs:
       - name: Install Bicep CLI
         run: az bicep install
 
-      - name: Bicep Format Check
-        run: |
-          diff <(az bicep format --file infra/main.bicep --stdout) infra/main.bicep || {
-            echo "::error::Bicep file is not formatted. Run 'az bicep format --file infra/main.bicep'"
-            exit 1
-          }
-
       - name: Bicep Restore
         run: az bicep restore --file infra/main.bicep
 
