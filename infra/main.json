@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "1336716168102803309"
+      "templateHash": "8565548545833081111"
     },
     "description": "Deploy Azure Storage Account + Azure Database for PostgreSQL Flexible Server + Azure Container Apps for private-isu"
   },
@@ -11246,14 +11246,8 @@
           "azureStorageContainerName": {
             "value": "[parameters('containerName')]"
           },
-          "postgresHost": {
-            "value": "[reference('postgres').outputs.postgresHost.value]"
-          },
-          "postgresDatabaseName": {
-            "value": "[parameters('postgresDatabaseName')]"
-          },
-          "postgresIdentityPrincipalName": {
-            "value": "[parameters('containerAppName')]"
+          "postgresDatabaseUrl": {
+            "value": "[format('postgresql://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresAdminUser'), parameters('postgresAdminPassword'), reference('postgres').outputs.postgresHost.value, parameters('postgresDatabaseName'))]"
           }
         },
         "template": {
@@ -11263,7 +11257,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "17554579065203666445"
+              "templateHash": "17230453048280961055"
             }
           },
           "parameters": {
@@ -11324,22 +11318,10 @@
                 "description": "Azure Blob Storage container name"
               }
             },
-            "postgresHost": {
-              "type": "string",
+            "postgresDatabaseUrl": {
+              "type": "securestring",
               "metadata": {
-                "description": "PostgreSQL server host FQDN"
-              }
-            },
-            "postgresDatabaseName": {
-              "type": "string",
-              "metadata": {
-                "description": "PostgreSQL database name"
-              }
-            },
-            "postgresIdentityPrincipalName": {
-              "type": "string",
-              "metadata": {
-                "description": "PostgreSQL Entra principal name used by app managed identity"
+                "description": "Application database URL for PostgreSQL"
               }
             }
           },
@@ -11365,6 +11347,12 @@
                 "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
                 "configuration": {
                   "activeRevisionsMode": "Single",
+                  "secrets": [
+                    {
+                      "name": "isuconp-database-url",
+                      "value": "[parameters('postgresDatabaseUrl')]"
+                    }
+                  ],
                   "ingress": {
                     "external": true,
                     "targetPort": 8080,
@@ -11383,24 +11371,8 @@
                       },
                       "env": [
                         {
-                          "name": "ISUCONP_DB_AUTH_MODE",
-                          "value": "managed_identity"
-                        },
-                        {
-                          "name": "ISUCONP_DB_HOST",
-                          "value": "[parameters('postgresHost')]"
-                        },
-                        {
-                          "name": "ISUCONP_DB_PORT",
-                          "value": "5432"
-                        },
-                        {
-                          "name": "ISUCONP_DB_NAME",
-                          "value": "[parameters('postgresDatabaseName')]"
-                        },
-                        {
-                          "name": "ISUCONP_DB_USER",
-                          "value": "[parameters('postgresIdentityPrincipalName')]"
+                          "name": "ISUCONP_DATABASE_URL",
+                          "secretRef": "isuconp-database-url"
                         },
                         {
                           "name": "ISUCONP_MEMCACHED_ADDRESS",
@@ -11474,10 +11446,6 @@
             "managedEnvironmentId": {
               "type": "string",
               "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
-            },
-            "postgresIdentityPrincipalName": {
-              "type": "string",
-              "value": "[parameters('postgresIdentityPrincipalName')]"
             }
           }
         }

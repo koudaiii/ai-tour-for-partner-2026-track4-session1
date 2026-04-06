@@ -76,41 +76,12 @@ logger = logging.getLogger(__name__)
 def config():
     global _config
     if _config is None:
-        db_auth_mode = os.environ.get("ISUCONP_DB_AUTH_MODE", "").lower()
-        if db_auth_mode == "managed_identity":
-            host = os.environ.get("ISUCONP_DB_HOST")
-            dbname = os.environ.get("ISUCONP_DB_NAME", "isuconp")
-            user = os.environ.get("ISUCONP_DB_USER")
-            port = int(os.environ.get("ISUCONP_DB_PORT", "5432"))
-            if not host or not user:
-                raise RuntimeError(
-                    "ISUCONP_DB_AUTH_MODE=managed_identity requires ISUCONP_DB_HOST and ISUCONP_DB_USER"
-                )
-            token = DefaultAzureCredential().get_token(
-                "https://ossrdbms-aad.database.windows.net/.default"
-            ).token
-            db_conf = {
-                "host": host,
-                "port": port,
-                "user": user,
-                "dbname": dbname,
-                "password": token,
-                "sslmode": "require",
-            }
-            logger.info(
-                "Using DB via managed identity token auth (%s@%s:%s/%s)",
-                user,
-                host,
-                port,
-                dbname,
-            )
-        else:
-            database_url = os.environ.get(
-                "ISUCONP_DATABASE_URL",
-                "postgresql://isuconp:isuconp@127.0.0.1:5432/isuconp?sslmode=disable",
-            )
-            db_conf = {"dsn": database_url}
-            logger.info("Using DB via ISUCONP_DATABASE_URL")
+        database_url = os.environ.get(
+            "ISUCONP_DATABASE_URL",
+            "postgresql://isuconp:isuconp@127.0.0.1:5432/isuconp?sslmode=disable",
+        )
+        db_conf = {"dsn": database_url}
+        logger.info("Using DB via ISUCONP_DATABASE_URL")
 
         _config = {
             "db": db_conf,

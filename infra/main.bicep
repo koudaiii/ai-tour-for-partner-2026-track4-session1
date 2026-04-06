@@ -158,9 +158,7 @@ module containerApps 'containerapps.bicep' = {
     azureStorageAccountUrl: storageAccount.outputs.primaryBlobEndpoint
     azureStorageAccountResourceId: storageAccount.outputs.resourceId
     azureStorageContainerName: containerName
-    postgresHost: postgres.outputs.postgresHost
-    postgresDatabaseName: postgresDatabaseName
-    postgresIdentityPrincipalName: containerAppName
+    postgresDatabaseUrl: 'postgresql://${postgresAdminUser}:${postgresAdminPassword}@${postgres.outputs.postgresHost}:5432/${postgresDatabaseName}?sslmode=require'
   }
 }
 

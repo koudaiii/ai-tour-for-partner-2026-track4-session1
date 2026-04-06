@@ -27,14 +27,9 @@ param azureStorageAccountResourceId string
 @description('Azure Blob Storage container name')
 param azureStorageContainerName string = 'images'
 
-@description('PostgreSQL server host FQDN')
-param postgresHost string
-
-@description('PostgreSQL database name')
-param postgresDatabaseName string
-
-@description('PostgreSQL Entra principal name used by app managed identity')
-param postgresIdentityPrincipalName string
+@description('Application database URL for PostgreSQL')
+@secure()
+param postgresDatabaseUrl string
 
 resource managedEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: containerAppsEnvironmentName
@@ -54,6 +49,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: managedEnvironment.id
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: [
+        {
+          name: 'isuconp-database-url'
+          value: postgresDatabaseUrl
+        }
+      ]
       ingress: {
         external: true
         targetPort: 8080
@@ -72,24 +73,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             {
-              name: 'ISUCONP_DB_AUTH_MODE'
-              value: 'managed_identity'
-            }
-            {
-              name: 'ISUCONP_DB_HOST'
-              value: postgresHost
-            }
-            {
-              name: 'ISUCONP_DB_PORT'
-              value: '5432'
-            }
-            {
-              name: 'ISUCONP_DB_NAME'
-              value: postgresDatabaseName
-            }
-            {
-              name: 'ISUCONP_DB_USER'
-              value: postgresIdentityPrincipalName
+              name: 'ISUCONP_DATABASE_URL'
+              secretRef: 'isuconp-database-url'
             }
             {
               name: 'ISUCONP_MEMCACHED_ADDRESS'
@@ -146,4 +131,3 @@ output containerAppFqdn string = containerApp.properties.configuration.ingress.f
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output managedEnvironmentName string = managedEnvironment.name
 output managedEnvironmentId string = managedEnvironment.id
-output postgresIdentityPrincipalName string = postgresIdentityPrincipalName
