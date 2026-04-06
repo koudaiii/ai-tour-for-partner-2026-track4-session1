@@ -78,9 +78,10 @@ def config():
     if _config is None:
         database_url = os.environ.get(
             "ISUCONP_DATABASE_URL",
-            "postgresql://isuconp:isuconp@127.0.0.1:5432/isuconp",
+            "postgresql://isuconp:isuconp@127.0.0.1:5432/isuconp?sslmode=disable",
         )
         db_conf = {"dsn": database_url}
+        logger.info("Using DB via ISUCONP_DATABASE_URL")
 
         _config = {
             "db": db_conf,
@@ -90,7 +91,6 @@ def config():
                 ),
             },
         }
-        logger.info("Using DB via ISUCONP_DATABASE_URL")
         logger.info("Using Memcached %s", _config["memcache"]["address"])
     return _config
 
