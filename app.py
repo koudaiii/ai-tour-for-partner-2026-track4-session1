@@ -271,6 +271,7 @@ def get_initialize():
 
 @app.route("/public/<path:filename>")
 def get_public_file(filename):
+    # nginx がないローカル実行時向けフォールバック。
     return flask.send_from_directory(str(public_dir), filename)
 
 
