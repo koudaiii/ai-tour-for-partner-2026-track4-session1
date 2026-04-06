@@ -205,4 +205,3 @@ output containerAppUrl string = containerApps.outputs.containerAppUrl
 
 @description('Container Apps managed environment name')
 output containerAppsEnvironmentName string = containerApps.outputs.managedEnvironmentName
-

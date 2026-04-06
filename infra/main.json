@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "510759513003839524"
+      "templateHash": "1336716168102803309"
     },
     "description": "Deploy Azure Storage Account + Azure Database for PostgreSQL Flexible Server + Azure Container Apps for private-isu"
   },
@@ -11263,7 +11263,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "7252339099263140676"
+              "templateHash": "17554579065203666445"
             }
           },
           "parameters": {
@@ -11350,11 +11350,7 @@
               "name": "[parameters('containerAppsEnvironmentName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
-              "properties": {
-                "appLogsConfiguration": {
-                  "destination": "none"
-                }
-              }
+              "properties": {}
             },
             {
               "type": "Microsoft.App/containerApps",

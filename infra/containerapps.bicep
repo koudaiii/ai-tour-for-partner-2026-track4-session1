@@ -40,11 +40,7 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: containerAppsEnvironmentName
   location: location
   tags: tags
-  properties: {
-    appLogsConfiguration: {
-      destination: 'none'
-    }
-  }
+  properties: {}
 }
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
@@ -151,4 +147,3 @@ output containerAppUrl string = 'https://${containerApp.properties.configuration
 output managedEnvironmentName string = managedEnvironment.name
 output managedEnvironmentId string = managedEnvironment.id
 output postgresIdentityPrincipalName string = postgresIdentityPrincipalName
-

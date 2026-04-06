@@ -38,7 +38,7 @@ Options:
   --app-image IMAGE           appContainerImage parameter value (default: docker.io/koudaiii/ai-tour-for-partner-2026-track4-session1:latest)
   --memcached-image IMAGE     memcachedContainerImage parameter value (default: docker.io/library/memcached:1.6)
   --skip-storage-role-grant   Skip running script/grant-storage-role after deploy
-  --skip-postgres-mi-grant    Skip running script/grant-postgres-mi-role after deploy
+  --skip-postgres-mi-grant    Deprecated (script/grant-postgres-mi-role is not executed)
   --dry-run                   Run what-if instead of create
   -h, --help                  Show this help
 EOF
@@ -493,20 +493,15 @@ main() {
     log "Skipped storage role grant (--skip-storage-role-grant)"
   fi
 
-  if [[ "${RUN_POSTGRES_MI_GRANT}" -eq 1 ]]; then
-    if [[ -x "${ROOT_DIR}/script/grant-postgres-mi-role" ]]; then
-      log "Granting PostgreSQL privileges for Container App managed identity"
-      "${ROOT_DIR}/script/grant-postgres-mi-role" \
-        --server "${POSTGRES_SERVER_NAME}" \
-        --database "${POSTGRES_DB_NAME}" \
-        --principal "${CONTAINER_APP_NAME}" \
-        --admin-user "${POSTGRES_ENTRA_ADMIN_NAME}"
-    else
-      log "Warning: script/grant-postgres-mi-role not found or not executable. Run it manually."
-    fi
-  else
+  if [[ "${RUN_POSTGRES_MI_GRANT}" -eq 0 ]]; then
     log "Skipped PostgreSQL managed identity grant (--skip-postgres-mi-grant)"
+  else
+    log "Skipping script/grant-postgres-mi-role due to policy constraints"
   fi
+
+  log "For local development, allow your client IP in both network firewalls before connecting:"
+  log "1) Blob Storage (${STORAGE_ACCOUNT_NAME}) firewall/IP rules"
+  log "2) PostgreSQL Flexible Server (${POSTGRES_SERVER_NAME}) firewall/IP rules"
 }
 
 main "$@"
