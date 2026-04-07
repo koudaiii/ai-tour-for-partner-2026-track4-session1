@@ -15,6 +15,21 @@ Create
 script/launch-vm
 ```
 
+Deploy application infrastructure (Azure Blob Storage + PostgreSQL + Container Apps + Azure Functions + API Management):
+
+```sh
+script/deploy-infra
+```
+
+After `script/deploy-infra`, perform the following before starting the app:
+
+1. Allow network access from your execution environment to PostgreSQL and Blob Storage.
+2. Run `script/bootstrap` to create the database tables.
+
+```sh
+script/bootstrap
+```
+
 List
 
 ```sh
@@ -114,7 +129,7 @@ VS Code (`.vscode/mcp.json`):
 - `script/backup`: Create PostgreSQL dump
 - `script/upload-to-github`: Upload dump file to GitHub Releases
 - `script/azurite`: Start Azurite local storage emulator (required by MCP server)
-- `script/deploy-infra`: Deploy Azure infra (Blob Storage + PostgreSQL) from `infra/main.bicep`
+- `script/deploy-infra`: Deploy Azure infra (Blob Storage + PostgreSQL + Container Apps + Azure Functions + API Management) from `infra/main.bicep` (standalone host setup is done separately via `provisioning/*/ansible/playbooks.yml`; after deploy, allow network access and run `script/bootstrap` for table creation)
 - `script/grant-storage-role`: Grant Blob data role to current Azure login for a storage account
 - `script/launch-vm`: Create Azure VM
 - `script/list-resource-groups`: List Resource Groups tagged for this repository
