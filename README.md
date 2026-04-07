@@ -7,13 +7,6 @@ script/bootstrap
 script/server
 ```
 
-If you need sample data
-
-```sh
-make init
-make restore
-```
-
 ## On Azure VM
 
 Create
@@ -32,6 +25,9 @@ Destroy
 
 ```sh
 script/destroy-vm
+
+# or Destroy aLl resouce groups
+script/list-resource-groups -q | xargs -I {} script/destroy-vm -g {}
 ```
 
 ## Local MCP Server

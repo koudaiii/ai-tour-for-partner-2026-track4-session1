@@ -8,5 +8,5 @@
       file: path=/home/isucon/private_isu.git state=absent
     - name: clone repos
       git:
-        repo=https://github.com/catatsuy/private-isu.git
+        repo=https://github.com/koudaiii/ai-tour-for-partner-2026-track4-session1.git
         dest=/home/isucon/private_isu.git
