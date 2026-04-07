@@ -13,7 +13,7 @@ import urllib.request
 
 import azure.functions as func
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+app = func.FunctionApp()
 
 logger = logging.getLogger(__name__)
 
@@ -32,40 +32,47 @@ def _api_get(path: str, params: dict | None = None) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _parse_args(context) -> dict:
+    """Parse tool arguments from the MCP trigger context."""
+    content = json.loads(context)
+    return content.get("arguments", content)
+
+
 # ---------------------------------------------------------------------------
 # Scenario 1: browse_timeline
-#   Combines: GET /api/posts (with pagination)
-#   Value-add: Summarises the timeline into a digest format with engagement
-#   metrics, filters by keyword, and supports natural cursor-based pagination.
 # ---------------------------------------------------------------------------
-@app.function_name("browse_timeline")
-@app.generic_trigger(
+@app.mcp_tool_trigger(
     arg_name="context",
-    type="mcpToolTrigger",
-    toolName="browse_timeline",
+    tool_name="browse_timeline",
     description=(
         "Browse the social media timeline. Returns a digest of recent posts "
         "with engagement metrics (comment counts). Supports keyword filtering "
         "and cursor-based pagination. Use this as the starting point to "
         "understand what is happening on the platform."
     ),
-    toolProperties=json.dumps({
-        "keyword": {
-            "type": "string",
+    tool_properties=json.dumps([
+        {
+            "propertyName": "keyword",
+            "propertyType": "string",
             "description": "Optional keyword to filter posts (searches post body text)",
+            "isRequired": False,
         },
-        "max_created_at": {
-            "type": "string",
+        {
+            "propertyName": "max_created_at",
+            "propertyType": "string",
             "description": "ISO8601 cursor for pagination — fetch posts older than this timestamp",
+            "isRequired": False,
         },
-        "limit": {
-            "type": "number",
+        {
+            "propertyName": "limit",
+            "propertyType": "number",
             "description": "Max number of posts to return (default 10, max 20)",
+            "isRequired": False,
         },
-    }),
+    ]),
 )
 def browse_timeline(context: str) -> str:
-    args = json.loads(context)
+    args = _parse_args(context)
     keyword = (args.get("keyword") or "").lower()
     limit = min(int(args.get("limit") or 10), 20)
 
@@ -110,30 +117,26 @@ def browse_timeline(context: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Scenario 2: explore_user
-#   Combines: GET /api/users/{name} + GET /api/users/{name}/posts
-#   Value-add: Single call returns full user profile, activity stats,
-#   and recent posts — a complete picture of who a user is.
 # ---------------------------------------------------------------------------
-@app.function_name("explore_user")
-@app.generic_trigger(
+@app.mcp_tool_trigger(
     arg_name="context",
-    type="mcpToolTrigger",
-    toolName="explore_user",
+    tool_name="explore_user",
     description=(
         "Get a comprehensive view of a user: profile, activity statistics, "
         "and their recent posts with comments — all in a single call. "
         "Use this to understand who a user is and what they have been posting."
     ),
-    toolProperties=json.dumps({
-        "account_name": {
-            "type": "string",
+    tool_properties=json.dumps([
+        {
+            "propertyName": "account_name",
+            "propertyType": "string",
             "description": "The account name of the user to explore",
+            "isRequired": True,
         },
-    }),
-    toolInputRequired='["account_name"]',
+    ]),
 )
 def explore_user(context: str) -> str:
-    args = json.loads(context)
+    args = _parse_args(context)
     account_name = args.get("account_name")
     if not account_name:
         return json.dumps({"error": "account_name is required"})
@@ -181,33 +184,32 @@ def explore_user(context: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Scenario 3: find_popular_posts
-#   Combines: GET /api/posts (potentially multiple pages)
-#   Value-add: Sorts by engagement (comment_count) — the raw API only
-#   supports chronological order. Identifies trending content.
 # ---------------------------------------------------------------------------
-@app.function_name("find_popular_posts")
-@app.generic_trigger(
+@app.mcp_tool_trigger(
     arg_name="context",
-    type="mcpToolTrigger",
-    toolName="find_popular_posts",
+    tool_name="find_popular_posts",
     description=(
         "Find the most popular (most commented) posts on the platform. "
         "The API only returns posts in chronological order, but this tool "
         "re-ranks them by engagement. Use this to discover trending content."
     ),
-    toolProperties=json.dumps({
-        "min_comments": {
-            "type": "number",
+    tool_properties=json.dumps([
+        {
+            "propertyName": "min_comments",
+            "propertyType": "number",
             "description": "Only return posts with at least this many comments (default 1)",
+            "isRequired": False,
         },
-        "limit": {
-            "type": "number",
+        {
+            "propertyName": "limit",
+            "propertyType": "number",
             "description": "Max number of posts to return (default 5, max 20)",
+            "isRequired": False,
         },
-    }),
+    ]),
 )
 def find_popular_posts(context: str) -> str:
-    args = json.loads(context)
+    args = _parse_args(context)
     min_comments = int(args.get("min_comments") or 1)
     limit = min(int(args.get("limit") or 5), 20)
 
@@ -243,31 +245,26 @@ def find_popular_posts(context: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Scenario 4: get_conversation
-#   Combines: GET /api/posts/{id} (with all_comments=True via the detail endpoint)
-#   Value-add: Formats the post + comment thread as a human-readable
-#   conversation transcript. Much easier for an LLM to reason about
-#   than raw JSON.
 # ---------------------------------------------------------------------------
-@app.function_name("get_conversation")
-@app.generic_trigger(
+@app.mcp_tool_trigger(
     arg_name="context",
-    type="mcpToolTrigger",
-    toolName="get_conversation",
+    tool_name="get_conversation",
     description=(
         "Get a post and its full comment thread formatted as a readable "
         "conversation. Returns the original post followed by all comments "
         "in chronological order, making it easy to follow the discussion."
     ),
-    toolProperties=json.dumps({
-        "post_id": {
-            "type": "number",
+    tool_properties=json.dumps([
+        {
+            "propertyName": "post_id",
+            "propertyType": "number",
             "description": "The ID of the post to view the conversation for",
+            "isRequired": True,
         },
-    }),
-    toolInputRequired='["post_id"]',
+    ]),
 )
 def get_conversation(context: str) -> str:
-    args = json.loads(context)
+    args = _parse_args(context)
     post_id = args.get("post_id")
     if not post_id:
         return json.dumps({"error": "post_id is required"})
@@ -307,30 +304,26 @@ def get_conversation(context: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Scenario 5: compare_users
-#   Combines: GET /api/users/{name} for multiple users
-#   Value-add: Fetches profiles in sequence and presents a side-by-side
-#   comparison table. APIM cannot orchestrate multi-call aggregation.
 # ---------------------------------------------------------------------------
-@app.function_name("compare_users")
-@app.generic_trigger(
+@app.mcp_tool_trigger(
     arg_name="context",
-    type="mcpToolTrigger",
-    toolName="compare_users",
+    tool_name="compare_users",
     description=(
         "Compare activity statistics of two or more users side by side. "
         "Shows post counts, comment counts, and engagement metrics for each "
         "user. Useful for understanding relative activity levels."
     ),
-    toolProperties=json.dumps({
-        "account_names": {
-            "type": "string",
+    tool_properties=json.dumps([
+        {
+            "propertyName": "account_names",
+            "propertyType": "string",
             "description": "Comma-separated list of account names to compare (2-5 users)",
+            "isRequired": True,
         },
-    }),
-    toolInputRequired='["account_names"]',
+    ]),
 )
 def compare_users(context: str) -> str:
-    args = json.loads(context)
+    args = _parse_args(context)
     raw = args.get("account_names", "")
     names = [n.strip() for n in raw.split(",") if n.strip()]
 
@@ -364,36 +357,33 @@ def compare_users(context: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Scenario 6: search_posts
-#   Combines: GET /api/posts (multiple pages via cursor)
-#   Value-add: The API has no search — this tool fetches the timeline and
-#   filters client-side by keyword across body and commenter names.
-#   APIM cannot add search semantics to an API that lacks them.
 # ---------------------------------------------------------------------------
-@app.function_name("search_posts")
-@app.generic_trigger(
+@app.mcp_tool_trigger(
     arg_name="context",
-    type="mcpToolTrigger",
-    toolName="search_posts",
+    tool_name="search_posts",
     description=(
         "Search posts by keyword. The underlying API has no search endpoint, "
         "so this tool fetches recent posts and filters them by matching "
         "the keyword against post body text and commenter names. "
         "Returns matching posts ranked by relevance."
     ),
-    toolProperties=json.dumps({
-        "query": {
-            "type": "string",
+    tool_properties=json.dumps([
+        {
+            "propertyName": "query",
+            "propertyType": "string",
             "description": "Search keyword or phrase to look for in post body and comments",
+            "isRequired": True,
         },
-        "limit": {
-            "type": "number",
+        {
+            "propertyName": "limit",
+            "propertyType": "number",
             "description": "Max results to return (default 5, max 20)",
+            "isRequired": False,
         },
-    }),
-    toolInputRequired='["query"]',
+    ]),
 )
 def search_posts(context: str) -> str:
-    args = json.loads(context)
+    args = _parse_args(context)
     query = (args.get("query") or "").lower()
     if not query:
         return json.dumps({"error": "query is required"})
