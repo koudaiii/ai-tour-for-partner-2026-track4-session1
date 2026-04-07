@@ -2,14 +2,8 @@
   become: yes
   gather_facts: yes
   tasks:
-    - name: download data artifacts via make init
+    - name: create database and tables
       become_user: isucon
-      shell: make init
-      args:
-        chdir: /home/isucon/private_isu
-
-    - name: restore postgres dump via make restore
-      become_user: isucon
-      shell: make restore
+      shell: script/bootstrap
       args:
         chdir: /home/isucon/private_isu

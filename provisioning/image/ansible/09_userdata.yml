@@ -10,7 +10,7 @@
   become_user: isucon
   gather_facts: no
   tasks:
-    - name: create userdata
+    - name: create image data
       tags: userdata
-      ansible.builtin.unarchive: src=https://github.com/catatsuy/private-isu/releases/download/img/img.zip dest=/home/isucon/private_isu/benchmarker/userdata remote_src=yes
+      ansible.builtin.unarchive: src=/home/isucon/private_isu/seed/images.zip dest=/home/isucon/private_isu/seed/images remote_src=yes  
       when: allinone is defined and allinone
