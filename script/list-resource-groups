@@ -13,6 +13,7 @@ List Azure Resource Groups created by this repository tag.
 
 Options:
   --output FORMAT  Azure CLI output format: table|json|tsv (default: table)
+  -q, --quiet      Print only resource group names (one per line)
   -h, --help       Show this help
 EOF
 }
@@ -37,6 +38,7 @@ ensure_azure_login() {
 }
 
 OUTPUT="table"
+QUIET=0
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -44,6 +46,10 @@ parse_args() {
       --output)
         OUTPUT="${2:-}"
         shift 2
+        ;;
+      -q|--quiet)
+        QUIET=1
+        shift
         ;;
       -h|--help)
         usage
@@ -73,6 +79,14 @@ main() {
   validate_output
   require_cmd az
   ensure_azure_login
+
+  if [[ "${QUIET}" -eq 1 ]]; then
+    az group list \
+      --tag "${REPO_TAG}" \
+      --query '[].name' \
+      --output tsv
+    return 0
+  fi
 
   log "Listing resource groups with tag '${REPO_TAG}'"
   az group list \
