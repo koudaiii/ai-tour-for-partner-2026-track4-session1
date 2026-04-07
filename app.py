@@ -586,3 +586,244 @@ def post_banned():
         cursor.execute(query, (1, id))
 
     return flask.redirect("/admin/banned")
+
+
+# ---- JSON API helpers ----
+
+
+def _image_url_for_post(post):
+    blob_key = post.get("img_blob_key")
+    if blob_key:
+        blob_url = get_blob_url(blob_key)
+        if blob_url:
+            return blob_url
+    ext = _mime_to_ext(post["mime"])
+    return "/image/%s%s" % (post["id"], ext)
+
+
+def _post_to_dict(post):
+    return {
+        "id": post["id"],
+        "user": {
+            "id": post["user"]["id"],
+            "account_name": post["user"]["account_name"],
+        },
+        "body": post["body"],
+        "mime": post["mime"],
+        "image_url": _image_url_for_post(post),
+        "created_at": post["created_at"].isoformat(),
+        "comment_count": post["comment_count"],
+        "comments": [
+            {
+                "id": c["id"],
+                "comment": c["comment"],
+                "user": {
+                    "id": c["user"]["id"],
+                    "account_name": c["user"]["account_name"],
+                },
+                "created_at": c["created_at"].isoformat(),
+            }
+            for c in post["comments"]
+        ],
+    }
+
+
+def _get_user_or_404(account_name):
+    cursor = db().cursor()
+    cursor.execute(
+        "SELECT * FROM users WHERE account_name = %s AND del_flg = 0",
+        (account_name,),
+    )
+    return cursor.fetchone()
+
+
+# ---- JSON API endpoints ----
+
+
+@app.route("/api/posts")
+def api_get_posts():
+    cursor = db().cursor()
+    max_created_at = flask.request.args.get("max_created_at")
+    if max_created_at:
+        max_created_at = _parse_iso8601(max_created_at)
+        cursor.execute(
+            "SELECT id, user_id, body, mime, created_at FROM posts WHERE created_at <= %s ORDER BY created_at DESC",
+            (max_created_at,),
+        )
+    else:
+        cursor.execute(
+            "SELECT id, user_id, body, mime, created_at FROM posts ORDER BY created_at DESC"
+        )
+    posts = make_posts(cursor.fetchall())
+    return flask.jsonify({"posts": [_post_to_dict(p) for p in posts]})
+
+
+@app.route("/api/posts/<int:id>")
+def api_get_post(id):
+    cursor = db().cursor()
+    cursor.execute("SELECT * FROM posts WHERE id = %s", (id,))
+    posts = make_posts(cursor.fetchall(), all_comments=True)
+    if not posts:
+        return flask.jsonify({"error": "not found"}), 404
+    return flask.jsonify({"post": _post_to_dict(posts[0])})
+
+
+@app.route("/api/posts", methods=["POST"])
+def api_create_post():
+    me = get_session_user()
+    if not me:
+        return flask.jsonify({"error": "login required"}), 401
+
+    if flask.request.form.get("csrf_token") != flask.session.get("csrf_token"):
+        return flask.jsonify({"error": "invalid csrf_token"}), 422
+
+    file = flask.request.files.get("file")
+    if not file:
+        return flask.jsonify({"error": "file is required"}), 400
+
+    mime = file.mimetype
+    if mime not in ("image/jpeg", "image/png", "image/gif"):
+        return flask.jsonify({"error": "unsupported image format"}), 400
+
+    with tempfile.TemporaryFile() as tempf:
+        file.save(tempf)
+        tempf.flush()
+        if tempf.tell() > UPLOAD_LIMIT:
+            return flask.jsonify({"error": "file too large"}), 400
+        tempf.seek(0)
+        imgdata = tempf.read()
+
+    container = blob_container_client()
+    cursor = db().cursor()
+
+    if container:
+        try:
+            blob_key = f"{uuid.uuid4()}{_mime_to_ext(mime)}"
+            container.upload_blob(
+                blob_key,
+                imgdata,
+                content_settings=ContentSettings(content_type=mime),
+                overwrite=True,
+            )
+            query = "INSERT INTO posts (user_id, mime, imgdata, body, img_blob_key) VALUES (%s,%s,%s,%s,%s) RETURNING id"
+            cursor.execute(query, (me["id"], mime, b"", flask.request.form.get("body"), blob_key))
+        except Exception:
+            app.logger.exception("Blob upload failed. Falling back to DB imgdata storage.")
+            query = "INSERT INTO posts (user_id, mime, imgdata, body) VALUES (%s,%s,%s,%s) RETURNING id"
+            cursor.execute(query, (me["id"], mime, imgdata, flask.request.form.get("body")))
+    else:
+        query = "INSERT INTO posts (user_id, mime, imgdata, body) VALUES (%s,%s,%s,%s) RETURNING id"
+        cursor.execute(query, (me["id"], mime, imgdata, flask.request.form.get("body")))
+
+    pid = cursor.fetchone()["id"]
+    return flask.jsonify({"id": pid}), 201
+
+
+@app.route("/api/comments", methods=["POST"])
+def api_create_comment():
+    me = get_session_user()
+    if not me:
+        return flask.jsonify({"error": "login required"}), 401
+
+    data = flask.request.get_json(silent=True) or {}
+    if data.get("csrf_token") != flask.session.get("csrf_token"):
+        return flask.jsonify({"error": "invalid csrf_token"}), 422
+
+    post_id = data.get("post_id")
+    comment = data.get("comment")
+    if not post_id or not isinstance(post_id, int):
+        return flask.jsonify({"error": "post_id must be an integer"}), 400
+    if not comment:
+        return flask.jsonify({"error": "comment is required"}), 400
+
+    cursor = db().cursor()
+    cursor.execute(
+        "INSERT INTO comments (post_id, user_id, comment) VALUES (%s, %s, %s)",
+        (post_id, me["id"], comment),
+    )
+    return flask.jsonify({"post_id": post_id}), 201
+
+
+@app.route("/api/users")
+def api_get_users():
+    cursor = db().cursor()
+    cursor.execute(
+        "SELECT id, account_name, created_at FROM users WHERE del_flg = 0 ORDER BY created_at DESC"
+    )
+    users = [
+        {
+            "id": u["id"],
+            "account_name": u["account_name"],
+            "created_at": u["created_at"].isoformat(),
+        }
+        for u in cursor.fetchall()
+    ]
+    return flask.jsonify({"users": users})
+
+
+@app.route("/api/users/<account_name>")
+def api_get_user(account_name):
+    user = _get_user_or_404(account_name)
+    if user is None:
+        return flask.jsonify({"error": "not found"}), 404
+
+    cursor = db().cursor()
+
+    cursor.execute(
+        "SELECT COUNT(*) AS count FROM comments WHERE user_id = %s", (user["id"],)
+    )
+    comment_count = cursor.fetchone()["count"]
+
+    cursor.execute("SELECT id FROM posts WHERE user_id = %s", (user["id"],))
+    post_ids = [p["id"] for p in cursor]
+    post_count = len(post_ids)
+
+    commented_count = 0
+    if post_count > 0:
+        cursor.execute(
+            "SELECT COUNT(*) AS count FROM comments WHERE post_id = ANY(%s)",
+            (post_ids,),
+        )
+        commented_count = cursor.fetchone()["count"]
+
+    return flask.jsonify({
+        "user": {
+            "id": user["id"],
+            "account_name": user["account_name"],
+            "created_at": user["created_at"].isoformat(),
+        },
+        "post_count": post_count,
+        "comment_count": comment_count,
+        "commented_count": commented_count,
+    })
+
+
+@app.route("/api/users/<account_name>/posts")
+def api_get_user_posts(account_name):
+    user = _get_user_or_404(account_name)
+    if user is None:
+        return flask.jsonify({"error": "not found"}), 404
+
+    cursor = db().cursor()
+    cursor.execute(
+        "SELECT id, user_id, body, mime, created_at FROM posts WHERE user_id = %s ORDER BY created_at DESC",
+        (user["id"],),
+    )
+    posts = make_posts(cursor.fetchall())
+    return flask.jsonify({"posts": [_post_to_dict(p) for p in posts]})
+
+
+@app.route("/api/users/<account_name>/posts/<int:id>")
+def api_get_user_post(account_name, id):
+    user = _get_user_or_404(account_name)
+    if user is None:
+        return flask.jsonify({"error": "not found"}), 404
+
+    cursor = db().cursor()
+    cursor.execute(
+        "SELECT * FROM posts WHERE id = %s AND user_id = %s", (id, user["id"])
+    )
+    posts = make_posts(cursor.fetchall(), all_comments=True)
+    if not posts:
+        return flask.jsonify({"error": "not found"}), 404
+    return flask.jsonify({"post": _post_to_dict(posts[0])})
