@@ -1,0 +1,307 @@
+openapi: 3.0.3
+info:
+  title: Private ISU API
+  description: REST JSON API for the Private ISU social media application.
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/posts:
+    get:
+      operationId: getPosts
+      summary: List timeline posts
+      parameters:
+        - name: max_created_at
+          in: query
+          required: false
+          description: ISO 8601 datetime for pagination (returns posts created at or before this time)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: A list of posts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Post"
+    post:
+      operationId: createPost
+      summary: Create a new post with an image
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - csrf_token
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (JPEG, PNG, or GIF)
+                body:
+                  type: string
+                  description: Post body text
+                csrf_token:
+                  type: string
+      responses:
+        "201":
+          description: Post created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidCsrf"
+
+  /api/posts/{id}:
+    get:
+      operationId: getPost
+      summary: Get a single post with all comments
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Post detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post:
+                    $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/comments:
+    post:
+      operationId: createComment
+      summary: Add a comment to a post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - post_id
+                - comment
+                - csrf_token
+              properties:
+                post_id:
+                  type: integer
+                comment:
+                  type: string
+                csrf_token:
+                  type: string
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post_id:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidCsrf"
+
+  /api/users:
+    get:
+      operationId: getUsers
+      summary: List all active users
+      responses:
+        "200":
+          description: A list of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserSummary"
+
+  /api/users/{account_name}:
+    get:
+      operationId: getUser
+      summary: Get user profile with stats
+      parameters:
+        - $ref: "#/components/parameters/AccountName"
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/UserSummary"
+                  post_count:
+                    type: integer
+                  comment_count:
+                    type: integer
+                    description: Number of comments the user has written
+                  commented_count:
+                    type: integer
+                    description: Number of comments on the user's posts
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/users/{account_name}/posts:
+    get:
+      operationId: getUserPosts
+      summary: List posts by a specific user
+      parameters:
+        - $ref: "#/components/parameters/AccountName"
+      responses:
+        "200":
+          description: A list of the user's posts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/users/{account_name}/posts/{id}:
+    get:
+      operationId: getUserPost
+      summary: Get a specific post by a user with all comments
+      parameters:
+        - $ref: "#/components/parameters/AccountName"
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Post detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post:
+                    $ref: "#/components/schemas/Post"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    AccountName:
+      name: account_name
+      in: path
+      required: true
+      schema:
+        type: string
+    PostId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  schemas:
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        account_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Comment:
+      type: object
+      properties:
+        id:
+          type: integer
+        comment:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        created_at:
+          type: string
+          format: date-time
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        body:
+          type: string
+        mime:
+          type: string
+        image_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        comment_count:
+          type: integer
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InvalidCsrf:
+      description: Invalid CSRF token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
