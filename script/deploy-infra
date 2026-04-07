@@ -83,6 +83,9 @@ log_resolved_parameters() {
   log "VIRTUAL_NETWORK_NAME=${VIRTUAL_NETWORK_NAME}"
   log "APP_CONTAINER_IMAGE=${APP_CONTAINER_IMAGE}"
   log "MEMCACHED_CONTAINER_IMAGE=${MEMCACHED_CONTAINER_IMAGE}"
+  log "FUNCTION_APP_NAME=${FUNCTION_APP_NAME}"
+  log "FUNCTION_APP_SERVICE_PLAN_NAME=${FUNCTION_APP_SERVICE_PLAN_NAME}"
+  log "FUNCTIONS_STORAGE_ACCOUNT_NAME=${FUNCTIONS_STORAGE_ACCOUNT_NAME}"
   log "POSTGRES_ADMIN_PASSWORD=***"
   log "TAGS_JSON=${TAGS_JSON}"
 }
@@ -180,6 +183,20 @@ generate_virtual_network_name() {
   echo "vnet-${WORKLOAD_CODE}-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}" | cut -c1-64
 }
 
+generate_function_app_name() {
+  echo "func-${WORKLOAD_CODE}-mcp-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}" | cut -c1-60
+}
+
+generate_function_app_service_plan_name() {
+  echo "asp-${WORKLOAD_CODE}-mcp-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}" | cut -c1-40
+}
+
+generate_functions_storage_account_name() {
+  local rand
+  rand="$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 2)"
+  echo "stfn${WORKLOAD_CODE}${REGION_CODE}${DATE_YYMMDD:0:6}${rand}" | cut -c1-24
+}
+
 resolve_region_code() {
   case "${LOCATION}" in
     japaneast) REGION_CODE="jpe" ;;
@@ -266,6 +283,9 @@ CONTAINER_APP_NAME=""
 VIRTUAL_NETWORK_NAME=""
 APP_CONTAINER_IMAGE="docker.io/koudaiii/ai-tour-for-partner-2026-track4-session1:latest"
 MEMCACHED_CONTAINER_IMAGE="docker.io/library/memcached:1.6"
+FUNCTION_APP_NAME=""
+FUNCTION_APP_SERVICE_PLAN_NAME=""
+FUNCTIONS_STORAGE_ACCOUNT_NAME=""
 DRY_RUN=0
 RUN_STORAGE_ROLE_GRANT=1
 RUN_POSTGRES_MI_GRANT=1
@@ -440,6 +460,16 @@ validate_inputs() {
     echo "Error: --postgres-entra-admin-type must be one of: User, Group, ServicePrincipal." >&2
     exit 1
   fi
+
+  if [[ -z "${FUNCTION_APP_NAME}" ]]; then
+    FUNCTION_APP_NAME="$(generate_function_app_name)"
+  fi
+  if [[ -z "${FUNCTION_APP_SERVICE_PLAN_NAME}" ]]; then
+    FUNCTION_APP_SERVICE_PLAN_NAME="$(generate_function_app_service_plan_name)"
+  fi
+  if [[ -z "${FUNCTIONS_STORAGE_ACCOUNT_NAME}" ]]; then
+    FUNCTIONS_STORAGE_ACCOUNT_NAME="$(generate_functions_storage_account_name)"
+  fi
 }
 
 main() {
@@ -476,6 +506,9 @@ main() {
     "virtualNetworkName=${VIRTUAL_NETWORK_NAME}"
     "appContainerImage=${APP_CONTAINER_IMAGE}"
     "memcachedContainerImage=${MEMCACHED_CONTAINER_IMAGE}"
+    "functionAppName=${FUNCTION_APP_NAME}"
+    "functionAppServicePlanName=${FUNCTION_APP_SERVICE_PLAN_NAME}"
+    "functionsStorageAccountName=${FUNCTIONS_STORAGE_ACCOUNT_NAME}"
     "tags=${TAGS_JSON}"
   )
 
@@ -510,6 +543,9 @@ main() {
       "virtualNetworkName=${VIRTUAL_NETWORK_NAME}"
       "appContainerImage=${APP_CONTAINER_IMAGE}"
       "memcachedContainerImage=${MEMCACHED_CONTAINER_IMAGE}"
+      "functionAppName=${FUNCTION_APP_NAME}"
+      "functionAppServicePlanName=${FUNCTION_APP_SERVICE_PLAN_NAME}"
+      "functionsStorageAccountName=${FUNCTIONS_STORAGE_ACCOUNT_NAME}"
       "tags=${TAGS_JSON}"
     )
     log "Running what-if (no changes applied)"
