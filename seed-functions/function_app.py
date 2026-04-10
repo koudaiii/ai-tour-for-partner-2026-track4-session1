@@ -1,11 +1,12 @@
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 
 import azure.functions as func
 
-from seed_runner import run_seed
+from api_seed_runner import run_seed_via_api
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 logger = logging.getLogger(__name__)
@@ -17,12 +18,18 @@ def _default_path(value: str | None, fallback: str) -> Path:
     return Path(__file__).resolve().parent / fallback
 
 
+def _default_extract_dir(value: str | None) -> Path:
+    if value:
+        return Path(value)
+    return Path(tempfile.gettempdir()) / "isuconp-seed-extracted"
+
+
 @app.route(route="seed-now", methods=["POST"])
 def seed_now(req: func.HttpRequest) -> func.HttpResponse:
-    database_url = os.environ.get("ISUCONP_DATABASE_URL")
-    if not database_url:
+    api_base_url = os.environ.get("API_BASE_URL")
+    if not api_base_url:
         return func.HttpResponse(
-            json.dumps({"ok": False, "error": "ISUCONP_DATABASE_URL is required"}),
+            json.dumps({"ok": False, "error": "API_BASE_URL is required"}),
             status_code=500,
             mimetype="application/json",
         )
@@ -44,9 +51,8 @@ def seed_now(req: func.HttpRequest) -> func.HttpResponse:
         body.get("images_zip") if isinstance(body, dict) else None,
         "data/images.zip",
     )
-    extract_dir = _default_path(
-        body.get("extract_dir") if isinstance(body, dict) else None,
-        "data/extracted",
+    extract_dir = _default_extract_dir(
+        body.get("extract_dir") if isinstance(body, dict) else None
     )
     post_count = int(
         (
@@ -57,8 +63,8 @@ def seed_now(req: func.HttpRequest) -> func.HttpResponse:
     )
 
     try:
-        created = run_seed(
-            database_url=database_url,
+        created = run_seed_via_api(
+            api_base_url=body.get("api_base_url") if isinstance(body, dict) and body.get("api_base_url") else api_base_url,
             users_json=users_json,
             posts_json=posts_json,
             images_zip=images_zip,

@@ -17,9 +17,8 @@ param appServicePlanName string
 @maxLength(24)
 param functionsStorageAccountName string
 
-@description('Application database URL for PostgreSQL')
-@secure()
-param postgresDatabaseUrl string
+@description('Base URL of the Container App API (e.g. https://aca-xxx.azurecontainerapps.io)')
+param apiBaseUrl string
 
 @description('Azure Blob Storage account URL')
 param azureStorageAccountUrl string
@@ -47,8 +46,8 @@ var functionAppBaseSettings = [
     value: 'python'
   }
   {
-    name: 'ISUCONP_DATABASE_URL'
-    value: postgresDatabaseUrl
+    name: 'API_BASE_URL'
+    value: apiBaseUrl
   }
   {
     name: 'AZURE_STORAGE_ACCOUNT_URL'

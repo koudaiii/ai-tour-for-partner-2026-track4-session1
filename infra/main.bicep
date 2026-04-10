@@ -269,7 +269,7 @@ module seedFunctions 'seed-functions.bicep' = {
     functionAppName: seedFunctionAppName
     appServicePlanName: seedFunctionAppServicePlanName
     functionsStorageAccountName: seedFunctionsStorageAccountName
-    postgresDatabaseUrl: 'postgresql://${postgresAdminUser}:${postgresAdminPassword}@${postgres.outputs.postgresHost}:5432/${postgresDatabaseName}?sslmode=require'
+    apiBaseUrl: containerApps.outputs.containerAppUrl
     azureStorageAccountUrl: storageAccount.outputs.primaryBlobEndpoint
     azureStorageAccountResourceId: storageAccount.outputs.resourceId
     azureStorageContainerName: containerName

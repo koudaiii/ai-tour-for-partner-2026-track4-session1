@@ -219,8 +219,15 @@ cd seed-functions && func azure functionapp publish ${SEED_FUNCTION_APP_NAME} --
 # Get function key:
 ${seed_key_cmd}
 
-# Trigger seed manually from local:
-curl -s -X POST "https://${seed_hostname}/api/seed-now?code=\$( ${seed_key_cmd} )" | jq .
+# Trigger seed via script/seed (API mode):
+export SEED_FUNCTION_KEY="\$( ${seed_key_cmd} )"
+script/seed | jq .
+
+# Or trigger directly:
+curl -s -X POST "https://${seed_hostname}/api/seed-now" \
+  -H "x-functions-key: \$( ${seed_key_cmd} )" \
+  -H "Content-Type: application/json" \
+  --data '{"post_count":100}' | jq .
 
 ===============================================================
 EOF
