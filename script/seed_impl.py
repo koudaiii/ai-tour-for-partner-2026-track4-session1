@@ -257,22 +257,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Seed demo users and posts")
     parser.add_argument(
         "--users-json",
-        default="provisioning/seed/demo_users.json",
+        default="data/demo_users.json",
         help="Path to demo users JSON",
     )
     parser.add_argument(
         "--posts-json",
-        default="provisioning/seed/demo_posts_text.json",
+        default="data/demo_posts_text.json",
         help="Path to demo post bodies JSON",
     )
     parser.add_argument(
         "--images-zip",
-        default="provisioning/seed/images.zip",
+        default="data/images.zip",
         help="Path to image zip file",
     )
     parser.add_argument(
         "--extract-dir",
-        default="provisioning/seed",
+        default="data",
         help="Extraction directory for images zip",
     )
     parser.add_argument(
