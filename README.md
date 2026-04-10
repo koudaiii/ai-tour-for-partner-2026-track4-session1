@@ -155,3 +155,27 @@ For application details and full setup guidance, see:
 
 - `.env.sample`: Template of supported environment variables
 - `.env`: Local environment file used for development
+
+## Seed Function (Manual Trigger)
+
+`infra/main.bicep` also deploys a seed-dedicated Function App.
+The function directly executes seed logic (users/posts/images) when `seed-now` is called.
+
+After `script/deploy-infra`, publish the seed function code:
+
+```sh
+cd seed-functions
+func azure functionapp publish <SEED_FUNCTION_APP_NAME>
+```
+
+Then trigger manually from local:
+
+```sh
+SEED_KEY="$(az functionapp function keys list \
+  --resource-group <RESOURCE_GROUP> \
+  --name <SEED_FUNCTION_APP_NAME> \
+  --function-name seed-now \
+  --query default -o tsv)"
+
+curl -s -X POST "https://<SEED_FUNCTION_APP_NAME>.azurewebsites.net/api/seed-now?code=${SEED_KEY}" | jq .
+```

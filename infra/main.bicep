@@ -138,6 +138,17 @@ param functionAppServicePlanName string = 'asp-${workloadCode}-mcp-${deploymentE
 @maxLength(24)
 param functionsStorageAccountName string = 'stfn${workloadCode}${regionCode}${substring(nowYyyymmddHhmm, 2, 6)}${substring(uniqueString(subscription().subscriptionId, nowYyyymmddHhmm, 'func'), 0, 2)}'
 
+@description('Name of the seed Function App')
+param seedFunctionAppName string = 'func-${workloadCode}-seed-${deploymentEnvironment}-${regionCode}-${substring(nowYyyymmddHhmm, 2, 10)}'
+
+@description('Name of the App Service Plan for the seed Function App')
+param seedFunctionAppServicePlanName string = 'asp-${workloadCode}-seed-${deploymentEnvironment}-${regionCode}-${substring(nowYyyymmddHhmm, 2, 10)}'
+
+@description('Name of the Storage Account for seed Azure Functions runtime')
+@minLength(3)
+@maxLength(24)
+param seedFunctionsStorageAccountName string = 'stfs${workloadCode}${regionCode}${substring(nowYyyymmddHhmm, 2, 6)}${substring(uniqueString(subscription().subscriptionId, nowYyyymmddHhmm, 'seedfunc'), 0, 2)}'
+
 @description('Tags to apply to all resources')
 param tags object = {}
 
@@ -249,6 +260,22 @@ module functions 'functions.bicep' = {
   }
 }
 
+module seedFunctions 'seed-functions.bicep' = {
+  name: 'seedFunctionsDeployment'
+  scope: rg
+  params: {
+    location: location
+    tags: tags
+    functionAppName: seedFunctionAppName
+    appServicePlanName: seedFunctionAppServicePlanName
+    functionsStorageAccountName: seedFunctionsStorageAccountName
+    postgresDatabaseUrl: 'postgresql://${postgresAdminUser}:${postgresAdminPassword}@${postgres.outputs.postgresHost}:5432/${postgresDatabaseName}?sslmode=require'
+    azureStorageAccountUrl: storageAccount.outputs.primaryBlobEndpoint
+    azureStorageAccountResourceId: storageAccount.outputs.resourceId
+    azureStorageContainerName: containerName
+  }
+}
+
 module apiManagement 'apimanagement.bicep' = {
   name: 'apiManagementDeployment'
   scope: rg
@@ -319,3 +346,9 @@ output functionAppUrl string = functions.outputs.functionAppUrl
 
 @description('MCP SSE endpoint URL')
 output mcpEndpointUrl string = functions.outputs.mcpEndpointUrl
+
+@description('Seed Function App name')
+output seedFunctionAppName string = seedFunctions.outputs.functionAppName
+
+@description('Seed Function App URL')
+output seedFunctionAppUrl string = seedFunctions.outputs.functionAppUrl

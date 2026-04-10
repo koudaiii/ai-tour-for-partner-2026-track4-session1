@@ -39,6 +39,9 @@ Options:
   --aca-app-name NAME         containerAppName parameter value
   --app-image IMAGE           appContainerImage parameter value (default: docker.io/koudaiii/ai-tour-for-partner-2026-track4-session1:latest)
   --memcached-image IMAGE     memcachedContainerImage parameter value (default: docker.io/library/memcached:1.6)
+  --seed-func-app NAME        seedFunctionAppName parameter value
+  --seed-func-plan NAME       seedFunctionAppServicePlanName parameter value
+  --seed-func-storage NAME    seedFunctionsStorageAccountName parameter value
   --skip-storage-role-grant   Skip running script/grant-storage-role after deploy
   --skip-postgres-mi-grant    Deprecated (script/grant-postgres-mi-role is not executed)
   --dry-run                   Run what-if instead of create
@@ -86,6 +89,9 @@ log_resolved_parameters() {
   log "FUNCTION_APP_NAME=${FUNCTION_APP_NAME}"
   log "FUNCTION_APP_SERVICE_PLAN_NAME=${FUNCTION_APP_SERVICE_PLAN_NAME}"
   log "FUNCTIONS_STORAGE_ACCOUNT_NAME=${FUNCTIONS_STORAGE_ACCOUNT_NAME}"
+  log "SEED_FUNCTION_APP_NAME=${SEED_FUNCTION_APP_NAME}"
+  log "SEED_FUNCTION_APP_SERVICE_PLAN_NAME=${SEED_FUNCTION_APP_SERVICE_PLAN_NAME}"
+  log "SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME=${SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME}"
   log "POSTGRES_ADMIN_PASSWORD=***"
   log "TAGS_JSON=${TAGS_JSON}"
 }
@@ -192,6 +198,34 @@ cd mcp-server && func azure functionapp publish ${FUNCTION_APP_NAME}
 EOF
 }
 
+print_seed_config() {
+  local seed_hostname rg_name seed_key_cmd
+  seed_hostname="${SEED_FUNCTION_APP_NAME}.azurewebsites.net"
+  rg_name="rg-${WORKLOAD_CODE}-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}"
+  seed_key_cmd="az functionapp function keys list --resource-group ${rg_name} --name ${SEED_FUNCTION_APP_NAME} --function-name seed-now --query default -o tsv"
+
+  cat <<EOF
+
+===============================================================
+  Seed Function - Manual Trigger
+===============================================================
+
+Seed Function App: ${SEED_FUNCTION_APP_NAME}
+Seed Endpoint: https://${seed_hostname}/api/seed-now
+
+# Deploy seed-functions code to Azure Functions:
+cd seed-functions && func azure functionapp publish ${SEED_FUNCTION_APP_NAME}
+
+# Get function key:
+${seed_key_cmd}
+
+# Trigger seed manually from local:
+curl -s -X POST "https://${seed_hostname}/api/seed-now?code=\$( ${seed_key_cmd} )" | jq .
+
+===============================================================
+EOF
+}
+
 write_application_env_file() {
   local account_url postgres_host database_url tmp_file
   account_url="https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net/"
@@ -200,7 +234,7 @@ write_application_env_file() {
   tmp_file="$(mktemp)"
 
   touch "${ENV_FILE}"
-  grep -vE '^(AZURE_STORAGE_ACCOUNT_URL|AZURE_STORAGE_CONTAINER_NAME|ISUCONP_DATABASE_URL|ISUCONP_DB_HOST|ISUCONP_DB_NAME|CONTAINER_APP_NAME|ISUCONP_DB_PORT|ISUCONP_DB_USER|ISUCONP_DB_PASSWORD|APIM_NAME|APIM_GATEWAY_URL|FUNCTION_APP_NAME|FUNCTION_APP_MCP_ENDPOINT)=' "${ENV_FILE}" > "${tmp_file}" || true
+  grep -vE '^(AZURE_STORAGE_ACCOUNT_URL|AZURE_STORAGE_CONTAINER_NAME|ISUCONP_DATABASE_URL|ISUCONP_DB_HOST|ISUCONP_DB_NAME|CONTAINER_APP_NAME|ISUCONP_DB_PORT|ISUCONP_DB_USER|ISUCONP_DB_PASSWORD|APIM_NAME|APIM_GATEWAY_URL|FUNCTION_APP_NAME|FUNCTION_APP_MCP_ENDPOINT|SEED_FUNCTION_APP_NAME|SEED_FUNCTION_APP_ENDPOINT)=' "${ENV_FILE}" > "${tmp_file}" || true
   {
     cat "${tmp_file}"
     echo "AZURE_STORAGE_ACCOUNT_URL=${account_url}"
@@ -213,6 +247,8 @@ write_application_env_file() {
     echo "APIM_GATEWAY_URL=https://${APIM_NAME}.azure-api.net"
     echo "FUNCTION_APP_NAME=${FUNCTION_APP_NAME}"
     echo "FUNCTION_APP_MCP_ENDPOINT=https://${FUNCTION_APP_NAME}.azurewebsites.net/runtime/webhooks/mcp"
+    echo "SEED_FUNCTION_APP_NAME=${SEED_FUNCTION_APP_NAME}"
+    echo "SEED_FUNCTION_APP_ENDPOINT=https://${SEED_FUNCTION_APP_NAME}.azurewebsites.net/api/seed-now"
   } > "${ENV_FILE}"
   rm -f "${tmp_file}"
 
@@ -285,6 +321,20 @@ generate_functions_storage_account_name() {
   local rand
   rand="$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 2)"
   echo "stfn${WORKLOAD_CODE}${REGION_CODE}${DATE_YYMMDD:0:6}${rand}" | cut -c1-24
+}
+
+generate_seed_function_app_name() {
+  echo "func-${WORKLOAD_CODE}-seed-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}" | cut -c1-60
+}
+
+generate_seed_function_app_service_plan_name() {
+  echo "asp-${WORKLOAD_CODE}-seed-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}" | cut -c1-40
+}
+
+generate_seed_functions_storage_account_name() {
+  local rand
+  rand="$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 2)"
+  echo "stfs${WORKLOAD_CODE}${REGION_CODE}${DATE_YYMMDD:0:6}${rand}" | cut -c1-24
 }
 
 resolve_region_code() {
@@ -376,6 +426,9 @@ MEMCACHED_CONTAINER_IMAGE="docker.io/library/memcached:1.6"
 FUNCTION_APP_NAME=""
 FUNCTION_APP_SERVICE_PLAN_NAME=""
 FUNCTIONS_STORAGE_ACCOUNT_NAME=""
+SEED_FUNCTION_APP_NAME=""
+SEED_FUNCTION_APP_SERVICE_PLAN_NAME=""
+SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME=""
 APIM_NAME=""
 DRY_RUN=0
 RUN_STORAGE_ROLE_GRANT=1
@@ -462,6 +515,18 @@ parse_args() {
         ;;
       --memcached-image)
         MEMCACHED_CONTAINER_IMAGE="${2:-}"
+        shift 2
+        ;;
+      --seed-func-app)
+        SEED_FUNCTION_APP_NAME="${2:-}"
+        shift 2
+        ;;
+      --seed-func-plan)
+        SEED_FUNCTION_APP_SERVICE_PLAN_NAME="${2:-}"
+        shift 2
+        ;;
+      --seed-func-storage)
+        SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME="${2:-}"
         shift 2
         ;;
       --skip-storage-role-grant)
@@ -561,6 +626,15 @@ validate_inputs() {
   if [[ -z "${FUNCTIONS_STORAGE_ACCOUNT_NAME}" ]]; then
     FUNCTIONS_STORAGE_ACCOUNT_NAME="$(generate_functions_storage_account_name)"
   fi
+  if [[ -z "${SEED_FUNCTION_APP_NAME}" ]]; then
+    SEED_FUNCTION_APP_NAME="$(generate_seed_function_app_name)"
+  fi
+  if [[ -z "${SEED_FUNCTION_APP_SERVICE_PLAN_NAME}" ]]; then
+    SEED_FUNCTION_APP_SERVICE_PLAN_NAME="$(generate_seed_function_app_service_plan_name)"
+  fi
+  if [[ -z "${SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME}" ]]; then
+    SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME="$(generate_seed_functions_storage_account_name)"
+  fi
   if [[ -z "${APIM_NAME}" ]]; then
     APIM_NAME="apim-${WORKLOAD_CODE}-${DEPLOYMENT_ENVIRONMENT}-${REGION_CODE}-${DATE_YYMMDDHHMM}"
   fi
@@ -603,6 +677,9 @@ main() {
     "functionAppName=${FUNCTION_APP_NAME}"
     "functionAppServicePlanName=${FUNCTION_APP_SERVICE_PLAN_NAME}"
     "functionsStorageAccountName=${FUNCTIONS_STORAGE_ACCOUNT_NAME}"
+    "seedFunctionAppName=${SEED_FUNCTION_APP_NAME}"
+    "seedFunctionAppServicePlanName=${SEED_FUNCTION_APP_SERVICE_PLAN_NAME}"
+    "seedFunctionsStorageAccountName=${SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME}"
     "tags=${TAGS_JSON}"
   )
 
@@ -640,6 +717,9 @@ main() {
       "functionAppName=${FUNCTION_APP_NAME}"
       "functionAppServicePlanName=${FUNCTION_APP_SERVICE_PLAN_NAME}"
       "functionsStorageAccountName=${FUNCTIONS_STORAGE_ACCOUNT_NAME}"
+      "seedFunctionAppName=${SEED_FUNCTION_APP_NAME}"
+      "seedFunctionAppServicePlanName=${SEED_FUNCTION_APP_SERVICE_PLAN_NAME}"
+      "seedFunctionsStorageAccountName=${SEED_FUNCTIONS_STORAGE_ACCOUNT_NAME}"
       "tags=${TAGS_JSON}"
     )
     log "Running what-if (no changes applied)"
@@ -647,6 +727,7 @@ main() {
     print_application_env
     print_apim_test_guide
     print_mcp_config
+    print_seed_config
     return 0
   fi
 
@@ -679,6 +760,7 @@ main() {
 
   print_apim_test_guide
   print_mcp_config
+  print_seed_config
 }
 
 main "$@"
