@@ -1,0 +1,4 @@
+azure-functions>=1.24.0
+azure-identity>=1.25.3
+azure-storage-blob>=12.26.0
+psycopg2-binary>=2.9.10

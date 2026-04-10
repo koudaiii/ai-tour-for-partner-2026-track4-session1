@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "9255156669409908604"
+      "templateHash": "16318676814529411024"
     },
     "description": "Deploy Azure Storage Account + Azure Database for PostgreSQL Flexible Server + Azure Container Apps for private-isu"
   },
@@ -265,6 +265,29 @@
       "maxLength": 24,
       "metadata": {
         "description": "Name of the Storage Account for Azure Functions runtime"
+      }
+    },
+    "seedFunctionAppName": {
+      "type": "string",
+      "defaultValue": "[format('func-{0}-seed-{1}-{2}-{3}', parameters('workloadCode'), parameters('deploymentEnvironment'), parameters('regionCode'), substring(parameters('nowYyyymmddHhmm'), 2, 10))]",
+      "metadata": {
+        "description": "Name of the seed Function App"
+      }
+    },
+    "seedFunctionAppServicePlanName": {
+      "type": "string",
+      "defaultValue": "[format('asp-{0}-seed-{1}-{2}-{3}', parameters('workloadCode'), parameters('deploymentEnvironment'), parameters('regionCode'), substring(parameters('nowYyyymmddHhmm'), 2, 10))]",
+      "metadata": {
+        "description": "Name of the App Service Plan for the seed Function App"
+      }
+    },
+    "seedFunctionsStorageAccountName": {
+      "type": "string",
+      "defaultValue": "[format('stfs{0}{1}{2}{3}', parameters('workloadCode'), parameters('regionCode'), substring(parameters('nowYyyymmddHhmm'), 2, 6), substring(uniqueString(subscription().subscriptionId, parameters('nowYyyymmddHhmm'), 'seedfunc'), 0, 2))]",
+      "minLength": 3,
+      "maxLength": 24,
+      "metadata": {
+        "description": "Name of the Storage Account for seed Azure Functions runtime"
       }
     },
     "tags": {
@@ -11973,6 +11996,216 @@
         "rg"
       ]
     },
+    "seedFunctions": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "seedFunctionsDeployment",
+      "resourceGroup": "[variables('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "functionAppName": {
+            "value": "[parameters('seedFunctionAppName')]"
+          },
+          "appServicePlanName": {
+            "value": "[parameters('seedFunctionAppServicePlanName')]"
+          },
+          "functionsStorageAccountName": {
+            "value": "[parameters('seedFunctionsStorageAccountName')]"
+          },
+          "apiBaseUrl": {
+            "value": "[reference('containerApps').outputs.containerAppUrl.value]"
+          },
+          "azureStorageAccountUrl": {
+            "value": "[reference('storageAccount').outputs.primaryBlobEndpoint.value]"
+          },
+          "azureStorageAccountResourceId": {
+            "value": "[reference('storageAccount').outputs.resourceId.value]"
+          },
+          "azureStorageContainerName": {
+            "value": "[parameters('containerName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "3519031943903544954"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "The Azure region for resource deployment"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to resources"
+              }
+            },
+            "functionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the seed Function App"
+              }
+            },
+            "appServicePlanName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the App Service Plan for the seed Function App"
+              }
+            },
+            "functionsStorageAccountName": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 24,
+              "metadata": {
+                "description": "Name of the Storage Account for seed Azure Functions runtime"
+              }
+            },
+            "apiBaseUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Base URL of the Container App API (e.g. https://aca-xxx.azurecontainerapps.io)"
+              }
+            },
+            "azureStorageAccountUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Blob Storage account URL"
+              }
+            },
+            "azureStorageAccountResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Blob Storage account resource ID"
+              }
+            },
+            "azureStorageContainerName": {
+              "type": "string",
+              "defaultValue": "images",
+              "metadata": {
+                "description": "Azure Blob Storage container name"
+              }
+            },
+            "seedPostCount": {
+              "type": "int",
+              "defaultValue": 100,
+              "metadata": {
+                "description": "Default number of posts to create for one seed run"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2025-01-01",
+              "name": "[parameters('functionsStorageAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false
+              }
+            },
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2024-04-01",
+              "name": "[parameters('appServicePlanName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "functionapp",
+              "sku": {
+                "name": "Y1",
+                "tier": "Dynamic"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2024-04-01",
+              "name": "[parameters('functionAppName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "kind": "functionapp,linux",
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "linuxFxVersion": "Python|3.11",
+                  "appSettings": "[concat(createArray(createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('functionsStorageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('functionsStorageAccountName')), '2025-01-01').keys[0].value)), createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'python'), createObject('name', 'API_BASE_URL', 'value', parameters('apiBaseUrl')), createObject('name', 'AZURE_STORAGE_ACCOUNT_URL', 'value', parameters('azureStorageAccountUrl')), createObject('name', 'AZURE_STORAGE_CONTAINER_NAME', 'value', parameters('azureStorageContainerName')), createObject('name', 'SEED_POST_COUNT', 'value', string(parameters('seedPostCount')))), createArray(createObject('name', 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('functionsStorageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('functionsStorageAccountName')), '2025-01-01').keys[0].value)), createObject('name', 'WEBSITE_CONTENTSHARE', 'value', toLower(parameters('functionAppName')))))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('functionsStorageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('azureStorageAccountResourceId'), '/')))]",
+              "name": "[guid(parameters('azureStorageAccountResourceId'), parameters('functionAppName'), 'Storage Blob Data Contributor')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2024-04-01', 'full').identity.principalId]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "functionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Seed Function App name"
+              },
+              "value": "[parameters('functionAppName')]"
+            },
+            "functionAppUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Seed Function App URL"
+              },
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2024-04-01').defaultHostName)]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "containerApps",
+        "rg",
+        "storageAccount"
+      ]
+    },
     "apiManagement": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -12291,6 +12524,20 @@
         "description": "MCP SSE endpoint URL"
       },
       "value": "[reference('functions').outputs.mcpEndpointUrl.value]"
+    },
+    "seedFunctionAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "Seed Function App name"
+      },
+      "value": "[reference('seedFunctions').outputs.functionAppName.value]"
+    },
+    "seedFunctionAppUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Seed Function App URL"
+      },
+      "value": "[reference('seedFunctions').outputs.functionAppUrl.value]"
     }
   }
 }
