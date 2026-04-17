@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.41.2.15936",
-      "templateHash": "6203856860735718387"
+      "version": "0.42.1.51946",
+      "templateHash": "4966725175506903827"
     },
     "description": "Deploy Azure Storage Account + Azure Database for PostgreSQL Flexible Server + Azure Container Apps for private-isu"
   },
@@ -359,8 +359,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "311804865726027998"
+              "version": "0.42.1.51946",
+              "templateHash": "14514040674218283620"
             }
           },
           "parameters": {
@@ -519,8 +519,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "394470703911171080"
+              "version": "0.42.1.51946",
+              "templateHash": "14463625585171880377"
             }
           },
           "parameters": {
@@ -8850,8 +8850,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "2116989671178580162"
+              "version": "0.42.1.51946",
+              "templateHash": "7306985940444065235"
             }
           },
           "parameters": {
@@ -11752,8 +11752,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "13940810490400997174"
+              "version": "0.42.1.51946",
+              "templateHash": "1004829336187905747"
             }
           },
           "parameters": {
@@ -12057,8 +12057,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "5481282077744456462"
+              "version": "0.42.1.51946",
+              "templateHash": "12731099803968589581"
             }
           },
           "parameters": {
@@ -12277,8 +12277,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "4561379825657845935"
+              "version": "0.42.1.51946",
+              "templateHash": "17665123748392417764"
             }
           },
           "parameters": {
@@ -12503,8 +12503,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "8909825863860644804"
+              "version": "0.42.1.51946",
+              "templateHash": "8077129958754229734"
             }
           },
           "parameters": {
@@ -12682,8 +12682,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "6370626621767457916"
+              "version": "0.42.1.51946",
+              "templateHash": "9637977787286080226"
             }
           },
           "parameters": {
